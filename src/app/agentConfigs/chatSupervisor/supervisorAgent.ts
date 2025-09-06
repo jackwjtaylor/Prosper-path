@@ -182,7 +182,7 @@ async function handleToolCalls(
       let args: any = {};
       try {
         args = toolCall.arguments ? JSON.parse(toolCall.arguments) : {};
-      } catch (_e) {
+      } catch {
         if (addBreadcrumb) addBreadcrumb(`[supervisorAgent] bad tool args for ${fName}`, { raw: toolCall.arguments });
         args = {};
       }

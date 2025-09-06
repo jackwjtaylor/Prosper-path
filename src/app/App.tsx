@@ -359,19 +359,19 @@ function App() {
   }, []);
 
   return (
-    <div className="text-base flex flex-col h-screen bg-gray-100 text-gray-800">
+    <div className="text-base flex flex-col h-screen bg-prosper-neutral-background text-prosper-neutral-dark-ink">
       {/* Header */}
       <div className="p-5 text-lg font-semibold flex justify-between items-center max-w-7xl mx-auto w-full relative">
         <Link href="/home" className="flex items-center">
           <Image src="2D76K394f.eps.svg" alt="Prosper Logo" width={20} height={20} className="mr-2" />
-          <span>Prosper AI <span className="text-gray-400">your personal wealth coach</span></span>
+          <span>Prosper AI <span className="text-prosper-neutral-text">your personal wealth coach</span></span>
         </Link>
         <nav className="hidden md:flex items-center gap-6 text-sm">
-          <Link href="/home" className="text-gray-700 hover:text-gray-900">Home</Link>
-          <Link href="/pricing" className="text-gray-700 hover:text-gray-900">Pricing</Link>
-          <Link href="/feedback" className="text-gray-700 hover:text-gray-900">Feedback</Link>
-          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('chat'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-gray-700 hover:text-gray-900">Chat</a>
-          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('dashboard'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-gray-700 hover:text-gray-900">Dashboard</a>
+          <Link href="/home" className="text-prosper-neutral-text hover:text-prosper-neutral-dark-ink">Home</Link>
+          <Link href="/pricing" className="text-prosper-neutral-text hover:text-prosper-neutral-dark-ink">Pricing</Link>
+          <Link href="/feedback" className="text-prosper-neutral-text hover:text-prosper-neutral-dark-ink">Feedback</Link>
+          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('chat'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-prosper-neutral-text hover:text-prosper-neutral-dark-ink">Chat</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('dashboard'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-prosper-neutral-text hover:text-prosper-neutral-dark-ink">Dashboard</a>
         </nav>
         <ProfileMenu
           householdId={householdId}
@@ -450,17 +450,17 @@ function App() {
         </div>
 
         {/* Bottom mobile tab bar */}
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-sm z-40">
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-prosper-neutral-background border-t border-prosper-neutral-divider shadow-sm z-40">
           <div className="max-w-7xl mx-auto px-2">
             <div className="flex justify-around py-2">
               <button
-                className={`px-4 py-2 rounded-md text-sm ${activeTab === 'chat' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-800'}`}
+                className={`px-4 py-2 rounded-md text-sm ${activeTab === 'chat' ? 'bg-prosper-green-dark text-white' : 'bg-prosper-neutral-background text-prosper-neutral-dark-ink'}`}
                 onClick={() => setActiveTab('chat')}
               >
                 Chat
               </button>
               <button
-                className={`px-4 py-2 rounded-md text-sm ${activeTab === 'dashboard' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-800'}`}
+                className={`px-4 py-2 rounded-md text-sm ${activeTab === 'dashboard' ? 'bg-prosper-green-dark text-white' : 'bg-prosper-neutral-background text-prosper-neutral-dark-ink'}`}
                 onClick={() => setActiveTab('dashboard')}
               >
                 Dashboard
@@ -472,23 +472,23 @@ function App() {
       {/* Terms & Privacy consent bar */}
       {!hasAccepted && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg border shadow-xl w-full max-w-lg p-5">
+          <div className="bg-prosper-neutral-background rounded-lg border border-prosper-neutral-divider shadow-xl w-full max-w-lg p-5">
             <div className="flex items-start gap-3">
-              <div className="h-6 w-6 rounded-full bg-yellow-100 border border-yellow-300 flex items-center justify-center shrink-0" aria-hidden="true">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 8v5" stroke="#a16207" strokeWidth="2"/><circle cx="12" cy="17" r="1" fill="#a16207"/></svg>
+              <div className="h-6 w-6 rounded-full bg-prosper-accent-gold/20 border border-prosper-accent-gold flex items-center justify-center shrink-0" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 8v5" stroke="#d9b648" strokeWidth="2"/><circle cx="12" cy="17" r="1" fill="#d9b648"/></svg>
               </div>
               <div className="flex-1">
-                <div className="text-base font-semibold text-gray-900">Please accept our Terms to continue</div>
-                <div className="text-sm text-gray-700 mt-1">To use Prosper, you need to accept our Terms and Privacy Policy.</div>
-                <div className="text-sm text-gray-600 mt-2">
+                <div className="text-base font-semibold text-prosper-neutral-dark-ink">Please accept our Terms to continue</div>
+                <div className="text-sm text-prosper-neutral-text mt-1">To use Prosper, you need to accept our Terms and Privacy Policy.</div>
+                <div className="text-sm text-prosper-neutral-text mt-2">
                   By continuing you agree to our <a href="/terms" target="_blank" className="underline">Terms</a> and <a href="/privacy" target="_blank" className="underline">Privacy Policy</a>.
                 </div>
                 <div className="mt-3 flex items-center justify-end gap-2">
-                  <a className="px-3 py-1.5 rounded-md border bg-white hover:bg-gray-50 text-sm" href="/terms" target="_blank" rel="noreferrer">View Terms</a>
-                  <a className="px-3 py-1.5 rounded-md border bg-white hover:bg-gray-50 text-sm" href="/privacy" target="_blank" rel="noreferrer">View Privacy</a>
+                  <a className="px-3 py-1.5 rounded-md border border-prosper-neutral-divider bg-white hover:bg-prosper-neutral-background text-sm" href="/terms" target="_blank" rel="noreferrer">View Terms</a>
+                  <a className="px-3 py-1.5 rounded-md border border-prosper-neutral-divider bg-white hover:bg-prosper-neutral-background text-sm" href="/privacy" target="_blank" rel="noreferrer">View Privacy</a>
                   <button
                     type="button"
-                    className="px-3 py-1.5 rounded-md border bg-gray-900 text-white hover:bg-gray-800 text-sm"
+                    className="px-3 py-1.5 rounded-md border bg-prosper-green-main text-white hover:bg-prosper-green-dark text-sm"
                     onClick={() => {
                       try { localStorage.setItem('pp_terms_v1_accepted', '1'); } catch {}
                       setHasAccepted(true);
@@ -569,7 +569,7 @@ function ProfileMenu({ householdId, entitlements, household }: { householdId: st
     <div id="pp_profile_menu" className="relative">
       <button
         onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
-        className="h-9 w-9 rounded-full border bg-gray-900 text-white flex items-center justify-center hover:opacity-90"
+        className="h-9 w-9 rounded-full border border-prosper-neutral-divider bg-prosper-green-dark text-white flex items-center justify-center hover:opacity-90"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={fullName ? `Profile: ${fullName}` : (email ? `Profile: ${email}` : 'Profile')}
@@ -578,43 +578,43 @@ function ProfileMenu({ householdId, entitlements, household }: { householdId: st
         <span className="text-[11px] font-semibold">{initials}</span>
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 mt-2 w-64 bg-white border rounded-lg shadow-lg z-50">
-          <div className="px-3 py-2 border-b">
-            <div className="text-sm font-medium text-gray-900 truncate">{fullName || 'Guest'}</div>
-            <div className="text-xs text-gray-600 truncate">{email || 'No email'}</div>
-            <div className="text-[11px] text-gray-500 mt-1">Plan: <b className={plan === 'premium' ? 'text-emerald-600' : 'text-gray-700'}>{plan}</b></div>
+        <div role="menu" className="absolute right-0 mt-2 w-64 bg-prosper-neutral-background border border-prosper-neutral-divider rounded-lg shadow-lg z-50">
+          <div className="px-3 py-2 border-b border-prosper-neutral-divider">
+            <div className="text-sm font-medium text-prosper-neutral-dark-ink truncate">{fullName || 'Guest'}</div>
+            <div className="text-xs text-prosper-neutral-text truncate">{email || 'No email'}</div>
+            <div className="text-[11px] text-prosper-neutral-text mt-1">Plan: <b className={plan === 'premium' ? 'text-prosper-green-main' : 'text-prosper-neutral-dark-ink'}>{plan}</b></div>
           </div>
           <div className="py-1 text-sm">
-            <button className="w-full text-left px-3 py-2 hover:bg-gray-50" onClick={() => { setShowEdit(true); setOpen(false); }}>Edit profile</button>
-            <button className="w-full text-left px-3 py-2 hover:bg-gray-50" onClick={openUserData}>Review data</button>
+            <button className="w-full text-left px-3 py-2 hover:bg-prosper-neutral-background" onClick={() => { setShowEdit(true); setOpen(false); }}>Edit profile</button>
+            <button className="w-full text-left px-3 py-2 hover:bg-prosper-neutral-background" onClick={openUserData}>Review data</button>
             {plan === 'premium' ? (
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50" onClick={managePlan}>Manage plan</button>
+                <button className="w-full text-left px-3 py-2 hover:bg-prosper-neutral-background" onClick={managePlan}>Manage plan</button>
             ) : (
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50" onClick={upgrade}>Upgrade to Premium</button>
+                <button className="w-full text-left px-3 py-2 hover:bg-prosper-neutral-background" onClick={upgrade}>Upgrade to Premium</button>
             )}
-            <a className="block px-3 py-2 hover:bg-gray-50" href="/feedback">Send feedback</a>
-            <a className="block px-3 py-2 hover:bg-gray-50" href="/contact">Contact us</a>
-            <a className="block px-3 py-2 hover:bg-gray-50" href="/terms" target="_blank" rel="noreferrer">Terms</a>
-            <a className="block px-3 py-2 hover:bg-gray-50" href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
+              <a className="block px-3 py-2 hover:bg-prosper-neutral-background" href="/feedback">Send feedback</a>
+              <a className="block px-3 py-2 hover:bg-prosper-neutral-background" href="/contact">Contact us</a>
+              <a className="block px-3 py-2 hover:bg-prosper-neutral-background" href="/terms" target="_blank" rel="noreferrer">Terms</a>
+              <a className="block px-3 py-2 hover:bg-prosper-neutral-background" href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
           </div>
-          <div className="px-3 py-2 border-t flex items-center justify-between">
-            <div className="text-[11px] text-gray-500 truncate">ID: {householdId?.slice(0, 6)}…</div>
-            <button className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50" onClick={copyHouseholdId}>Copy</button>
+          <div className="px-3 py-2 border-t border-prosper-neutral-divider flex items-center justify-between">
+            <div className="text-[11px] text-prosper-neutral-text truncate">ID: {householdId?.slice(0, 6)}…</div>
+            <button className="text-xs px-2 py-1 rounded border border-prosper-neutral-divider bg-white hover:bg-prosper-neutral-background" onClick={copyHouseholdId}>Copy</button>
           </div>
         </div>
       )}
 
       {showEdit && (
         <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setShowEdit(false)}>
-          <div className="bg-white rounded-lg border shadow-lg w-full max-w-sm p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="text-sm font-medium text-gray-900 mb-2">Edit profile</div>
-            <label className="block text-xs text-gray-600">Full name</label>
-            <input className="w-full border rounded px-3 py-2 text-sm mb-2" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Your name" />
-            <label className="block text-xs text-gray-600">Email</label>
-            <input className="w-full border rounded px-3 py-2 text-sm" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />
+          <div className="bg-prosper-neutral-background rounded-lg border border-prosper-neutral-divider shadow-lg w-full max-w-sm p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="text-sm font-medium text-prosper-neutral-dark-ink mb-2">Edit profile</div>
+            <label className="block text-xs text-prosper-neutral-text">Full name</label>
+            <input className="w-full border border-prosper-neutral-divider rounded px-3 py-2 text-sm mb-2" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Your name" />
+            <label className="block text-xs text-prosper-neutral-text">Email</label>
+            <input className="w-full border border-prosper-neutral-divider rounded px-3 py-2 text-sm" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />
             <div className="mt-3 flex justify-end gap-2">
-              <button className="text-xs px-3 py-1.5 rounded border bg-white hover:bg-gray-50" onClick={() => setShowEdit(false)}>Cancel</button>
-              <button className="text-xs px-3 py-1.5 rounded border bg-gray-900 text-white hover:bg-gray-800" onClick={saveProfile}>Save</button>
+              <button className="text-xs px-3 py-1.5 rounded border border-prosper-neutral-divider bg-white hover:bg-prosper-neutral-background" onClick={() => setShowEdit(false)}>Cancel</button>
+              <button className="text-xs px-3 py-1.5 rounded border border-prosper-green-main bg-prosper-green-main text-white hover:bg-prosper-green-dark" onClick={saveProfile}>Save</button>
             </div>
           </div>
         </div>

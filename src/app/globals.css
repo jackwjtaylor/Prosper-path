@@ -3,15 +3,22 @@
 @tailwind utilities;
 
 :root {
-  --background: #fafafa;
-  --foreground: #171717;
-}
+  --prosper-green-main: #3fa46a;
+  --prosper-green-dark: #2f7d52;
+  --prosper-green-light: #d7f2e3;
+  --prosper-accent-gold: #d9b648;
+  --prosper-accent-teal: #3aa6a3;
+  --prosper-neutral-dark-ink: #2b2b2c;
+  --prosper-neutral-text: #666666;
+  --prosper-neutral-background: #f3f3f4;
+  --prosper-neutral-divider: #dadada;
+  --prosper-semantic-success: #4caf50;
+  --prosper-semantic-warning: #e0a63a;
+  --prosper-semantic-error: #d9543f;
+  --prosper-semantic-info: #3f7fd9;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: var(--prosper-neutral-background);
+  --foreground: var(--prosper-neutral-dark-ink);
 }
 
 body {

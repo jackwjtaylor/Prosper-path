@@ -97,9 +97,9 @@ function Sparkline({ points }: { points: SeriesPoint[] }) {
 
   if (!d) {
     return (
-      <div className="h-20 w-full bg-white rounded-md border flex items-center justify-center text-xs text-gray-500">
+      <div className="h-20 w-full bg-prosper-neutral-background rounded-md border border-prosper-neutral-divider flex items-center justify-center text-xs text-prosper-neutral-text">
         <div className="inline-flex items-center gap-2">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="#9CA3AF" /></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="#dadada" /></svg>
           No data
         </div>
       </div>
@@ -262,7 +262,8 @@ export default function Dashboard() {
   const componentsLiabsPresent = (slotsAny?.mortgage_balance?.value != null) || (slotsAny?.other_debt_balances_total?.value != null);
   const assetsOverrideUsed = (slotsAny?.assets_total?.value != null) && !componentsAssetsPresent;
   const debtsOverrideUsed = (slotsAny?.debts_total?.value != null) && !componentsLiabsPresent;
-  // const hasNwOverrides = assetsOverrideUsed || debtsOverrideUsed; // presently unused
+  void assetsOverrideUsed;
+  void debtsOverrideUsed;
 
   return (
     <>
@@ -1169,10 +1170,10 @@ function RangeNetWorth({ series, latest, currency }: { series: SeriesPoint[]; la
 
       {breakdown && (breakdown.assets != null || breakdown.debts != null) && (
         <div className="mt-3">
-          <div className="text-[11px] text-gray-600 mb-1">Assets vs liabilities</div>
+          <div className="text-[11px] text-prosper-neutral-text mb-1">Assets vs liabilities</div>
           {/* Stacked bar: red portion shows liabilities as a share of assets; green is equity portion. */}
           {typeof breakdown.assets === 'number' && breakdown.assets > 0 ? (
-            <div className="w-full h-4 rounded bg-gray-200 overflow-hidden" aria-label="Assets and liabilities breakdown">
+            <div className="w-full h-4 rounded bg-prosper-neutral-divider overflow-hidden" aria-label="Assets and liabilities breakdown">
               {(() => {
                 const assets = breakdown.assets as number;
                 const debts = Math.max(0, (breakdown.debts as number) || 0);
@@ -1180,14 +1181,14 @@ function RangeNetWorth({ series, latest, currency }: { series: SeriesPoint[]; la
                 const equityPct = Math.max(0, 1 - debtPct);
                 return (
                   <div className="w-full h-full flex">
-                    <div className="h-full" style={{ width: `${Math.round(debtPct * 100)}%`, backgroundColor: '#ef4444' }} title={`Liabilities: ${fmtCurrency(debts, currency)}`} />
-                    <div className="h-full" style={{ width: `${Math.round(equityPct * 100)}%`, backgroundColor: '#10b981' }} title={`Equity: ${fmtCurrency(Math.max(assets - debts, 0), currency)}`} />
+                    <div className="h-full" style={{ width: `${Math.round(debtPct * 100)}%`, backgroundColor: '#d9543f' }} title={`Liabilities: ${fmtCurrency(debts, currency)}`} />
+                    <div className="h-full" style={{ width: `${Math.round(equityPct * 100)}%`, backgroundColor: '#3fa46a' }} title={`Equity: ${fmtCurrency(Math.max(assets - debts, 0), currency)}`} />
                   </div>
                 );
               })()}
             </div>
           ) : (
-            <div className="text-[11px] text-gray-500">Add assets and debts to see a breakdown.</div>
+            <div className="text-[11px] text-prosper-neutral-text">Add assets and debts to see a breakdown.</div>
           )}
           <div className="mt-1 text-[11px] text-gray-700 flex items-center gap-3">
             <span>Assets: <b>{typeof breakdown.assets === 'number' ? fmtCurrency(breakdown.assets, currency) : '—'}</b></span>
