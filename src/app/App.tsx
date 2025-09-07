@@ -23,6 +23,7 @@ import { realtimeOnlyCompanyName } from "@/app/agentConfigs/realtimeOnly";
 import useAudioDownload from "./hooks/useAudioDownload";
 import { useHandleSessionHistory } from "./hooks/useHandleSessionHistory";
 import { ensureHouseholdId } from "@/app/lib/householdLocal";
+import { getSupabaseClient } from "@/app/lib/supabaseClient";
 
 const sdkScenarioMap: Record<string, RealtimeAgent[]> = allAgentSets;
 
@@ -37,15 +38,50 @@ function App() {
   const [selectedAgentConfigSet, setSelectedAgentConfigSet] = useState<RealtimeAgent[] | null>(null);
 
   const [householdId, setHouseholdId] = useState<string>("");
+  const [isAuthed, setIsAuthed] = useState<boolean>(false);
   const [isReturningUser, setIsReturningUser] = useState<boolean>(false);
   const [entitlements, setEntitlements] = useState<{ plan: 'free'|'premium'; subscription_status?: string; current_period_end?: string } | null>(null);
   const [householdInfo, setHouseholdInfo] = useState<{ email?: string; full_name?: string } | null>(null);
   useEffect(() => { ensureHouseholdId().then(setHouseholdId); }, []);
+  // Track auth status and auto-link household when signed in
+  useEffect(() => {
+    const supa = getSupabaseClient();
+    if (!supa) return;
+    (async () => {
+      const sessRes = await supa.auth.getSession();
+      const data = 'data' in sessRes ? sessRes.data : undefined;
+      const authed = !!data?.session;
+      setIsAuthed(authed);
+      if (authed) {
+        try {
+          const token = data?.session?.access_token;
+          await fetch('/api/household/ensure', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        } catch {}
+      }
+    })();
+    const { data: sub } = supa.auth.onAuthStateChange(async (_event, session) => {
+      const authed = !!session;
+      setIsAuthed(authed);
+      if (authed) {
+        try { await fetch('/api/household/ensure', { method: 'POST', headers: { Authorization: `Bearer ${session!.access_token}` } }); } catch {}
+      }
+    });
+    return () => { sub.subscription?.unsubscribe(); };
+  }, []);
   useEffect(() => {
     (async () => {
       if (!householdId) return;
       try {
-        const res = await fetch(`/api/prosper/dashboard?householdId=${householdId}`, { cache: 'no-store' });
+        let headers: any = {};
+        try {
+          const supa = getSupabaseClient();
+          if (supa) {
+            const { data } = await supa.auth.getSession();
+            const token = data?.session?.access_token;
+            if (token) headers.Authorization = `Bearer ${token}`;
+          }
+        } catch {}
+        const res = await fetch(`/api/prosper/dashboard?householdId=${householdId}`, { cache: 'no-store', headers });
         const json = await res.json();
         const inputs = json?.latestSnapshot?.inputs || {};
         const hasInputs = inputs && typeof inputs === 'object' && Object.keys(inputs).length > 0;
@@ -370,6 +406,17 @@ function App() {
           <Link href="/feedback" className="text-gray-700 hover:text-gray-900">Feedback</Link>
           <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('chat'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-gray-700 hover:text-gray-900">Chat</a>
           <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('dashboard'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-gray-700 hover:text-gray-900">Dashboard</a>
+          {!isAuthed ? (
+            <Link href="/login" className="text-gray-700 hover:text-gray-900">Sign in</Link>
+          ) : (
+            <a
+              href="#"
+              onClick={async (e) => { e.preventDefault(); try { await getSupabaseClient()?.auth.signOut(); } catch {} setIsAuthed(false); }}
+              className="text-gray-700 hover:text-gray-900"
+            >
+              Sign out
+            </a>
+          )}
         </nav>
         <ProfileMenu
           householdId={householdId}

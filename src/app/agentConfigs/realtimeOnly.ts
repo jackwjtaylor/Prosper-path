@@ -26,6 +26,19 @@ async function getHouseholdIdClient(): Promise<string> {
   return id;
 }
 
+async function getAuthHeader(): Promise<Record<string, string> | {}> {
+  try {
+    const supaMod = await import('@/app/lib/supabaseClient');
+    const supa = (supaMod as any).getSupabaseClient?.();
+    if (!supa) return {};
+    const { data } = await supa.auth.getSession();
+    const token = data?.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 // -------------------- session-local state --------------------
 let lastInputs: Record<string, any> | null = null;
 let lastSlots: Slots | null = null;
@@ -75,7 +88,7 @@ export const rehydrate = tool({
   execute: async () => {
     try {
       const hh = await getHouseholdIdClient();
-      const r = await fetch(`/api/prosper/dashboard?householdId=${encodeURIComponent(hh)}`, { cache: 'no-store' });
+      const r = await fetch(`/api/prosper/dashboard?householdId=${encodeURIComponent(hh)}`, { cache: 'no-store', headers: { ...(await getAuthHeader()) } });
       if (r.ok) {
         const d = await r.json();
         const snap = d?.latestSnapshot || null;
@@ -167,10 +180,18 @@ export const apply_delta_and_persist = tool({
     const addBreadcrumb = details?.context?.addTranscriptBreadcrumb as undefined | ((t: string, d?: any) => void);
     try {
       const res = await fetch('/api/prosper/apply', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(await getAuthHeader()) },
         body: JSON.stringify({ inputs: input?.inputs || {}, slots: input?.slots || {} }),
       });
       const j = await res.json();
+      if (res.status === 402) {
+        const upgrade = j?.upgrade_url as string | undefined;
+        const login = j?.login_url as string | undefined;
+        const msg = upgrade
+          ? `You’ve reached the free limit. To continue, please upgrade your plan here: ${upgrade}`
+          : `You’ve reached the free limit. Please sign in to continue: ${login || '/login'}`;
+        return { ok: false, paywall: true, message: msg } as any;
+      }
       if (!res.ok || !j?.snapshot) return { ok: false, error: j?.error || 'apply_failed' };
       const snap = j.snapshot as any;
       lastInputs = snap.inputs || {};
@@ -210,10 +231,18 @@ export const apply_slot_deltas = tool({
     const addBreadcrumb = details?.context?.addTranscriptBreadcrumb as undefined | ((t: string, d?: any) => void);
     try {
       const res = await fetch('/api/prosper/delta', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(await getAuthHeader()) },
         body: JSON.stringify({ deltas: input?.deltas || {}, confidences: input?.confidences || {} }),
       });
       const j = await res.json();
+      if (res.status === 402) {
+        const upgrade = j?.upgrade_url as string | undefined;
+        const login = j?.login_url as string | undefined;
+        const msg = upgrade
+          ? `You’ve reached the free limit. To continue, please upgrade your plan here: ${upgrade}`
+          : `You’ve reached the free limit. Please sign in to continue: ${login || '/login'}`;
+        return { ok: false, paywall: true, message: msg } as any;
+      }
       if (!res.ok || !j?.snapshot) return { ok: false, error: j?.error || 'delta_failed' };
       const snap = j.snapshot as any;
       lastInputs = snap.inputs || {};
@@ -447,10 +476,18 @@ export const persist_snapshot = tool({
       };
       const res = await fetch("/api/prosper/snapshots", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await getAuthHeader()) },
         body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => ({}));
+      if (res.status === 402) {
+        const upgrade = (json as any)?.upgrade_url as string | undefined;
+        const login = (json as any)?.login_url as string | undefined;
+        const msg = upgrade
+          ? `You’ve reached the free limit. To continue, please upgrade your plan here: ${upgrade}`
+          : `You’ve reached the free limit. Please sign in to continue: ${login || '/login'}`;
+        return { ok: false, paywall: true, message: msg } as any;
+      }
       if (!res.ok) return { ok: false, error: json };
       try { window.dispatchEvent(new CustomEvent('pp:snapshot_saved', { detail: { id: json?.id, created_at: json?.created_at } })); } catch {}
       return { ok: true, id: json?.id };

@@ -32,6 +32,7 @@ export async function GET() {
     sameSite: "lax",
     maxAge: ONE_YEAR,
     path: "/",
+    secure: process.env.NODE_ENV === 'production',
   });
   return res;
 }

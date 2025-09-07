@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import supabase from "@/app/lib/supabaseServer";
+import { assertHouseholdAccess } from "@/app/lib/auth";
 
 export async function GET(req: NextRequest) {
+  // Require household cookie; in the next step we will require an authenticated user and ownership check
   const url = new URL(req.url);
   const qId = url.searchParams.get("householdId");
   const cookieStore = await cookies();
@@ -12,6 +14,10 @@ export async function GET(req: NextRequest) {
   if (!householdId) {
     return NextResponse.json({ error: "household_id_required" }, { status: 400 });
   }
+
+  // AuthZ: user must own this household (or household has no user bound yet)
+  const authz = await assertHouseholdAccess(req, householdId);
+  if (!authz.ok) return NextResponse.json({ error: 'unauthorized' }, { status: authz.code });
 
   // Latest snapshot
   const { data: snaps, error: sErr } = await supabase
@@ -77,9 +83,9 @@ export async function GET(req: NextRequest) {
   // If free, cap series to ~90 days worth (by date)
   let shapedSeries = series || [];
   if (!isPremium && shapedSeries?.length) {
-    const lastTs = Date.parse(shapedSeries[shapedSeries.length-1].ts);
+    const lastTs = Date.parse((shapedSeries[shapedSeries.length-1] as any).ts);
     const cutoff = lastTs - 90*24*60*60*1000;
-    shapedSeries = shapedSeries.filter(p => Date.parse(p.ts) >= cutoff);
+    shapedSeries = shapedSeries.filter((p: any) => Date.parse(p.ts) >= cutoff);
   }
 
   // Shape mirrors previous payload while adding convenient mirrors

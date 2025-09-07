@@ -138,9 +138,32 @@ export default function Dashboard() {
     try {
       const id = await ensureHouseholdId();
       setHouseholdId(id);
-      const res = await fetch(`/api/prosper/dashboard?householdId=${id}`, { cache: "no-store" });
-      const json = (await res.json()) as DashboardPayload & { error?: string };
-      if (json?.error) throw new Error(json.error);
+      // Attach auth token if available
+      let headers: any = {};
+      try {
+        const supa = getSupabaseClient();
+        if (supa) {
+          const sessRes = await supa.auth.getSession();
+          const token = 'data' in (sessRes as any) ? (sessRes as any).data?.session?.access_token : undefined;
+          if (token) headers.Authorization = `Bearer ${token}`;
+        }
+      } catch {}
+
+      let res = await fetch(`/api/prosper/dashboard?householdId=${id}`, { cache: "no-store", headers });
+      // If unauthorized and we are authed, try to link cookie household then retry once
+      if ((res.status === 401 || res.status === 403) && headers.Authorization) {
+        try {
+          await fetch('/api/household/ensure', { method: 'POST', headers });
+          res = await fetch(`/api/prosper/dashboard?householdId=${id}`, { cache: 'no-store', headers });
+        } catch {}
+      }
+      if (!res.ok) {
+        if (res.status === 401) throw new Error('Please sign in to access your dashboard.');
+        if (res.status === 403) throw new Error('This device is linked to a different account. Please sign in again.');
+        const jj = await res.json().catch(() => ({}));
+        throw new Error((jj as any)?.error || 'Failed to load dashboard');
+      }
+      const json = (await res.json()) as DashboardPayload;
       setData(json);
     } catch (e: any) {
       setError(e?.message || "Failed to load dashboard");
