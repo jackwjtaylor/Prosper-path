@@ -6,6 +6,8 @@ import { getProsperLevelLabel } from "@/app/lib/prosperLevelLabels";
 import { normaliseCurrency } from "@/app/lib/validate";
 import { normaliseSlots } from "@/app/lib/normalise";
 import BenchmarksCard from "@/app/components/BenchmarksCard";
+import { Card } from "./ui/Card";
+import { Button } from "./ui/Button";
 
 /** ===== Types expected from /api/prosper/dashboard ===== */
 export type SeriesPoint = { ts: string; value: number };
@@ -139,7 +141,7 @@ export default function Dashboard() {
       const id = await ensureHouseholdId();
       setHouseholdId(id);
       // Attach auth token if available
-      let headers: any = {};
+      const headers: any = {};
       try {
         const supa = getSupabaseClient();
         if (supa) {
@@ -189,7 +191,7 @@ export default function Dashboard() {
     if (!supa || !householdId) return;
     const channel = supa
       .channel(`snapshots:${householdId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'snapshots', filter: `household_id=eq.${householdId}` }, (_payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'snapshots', filter: `household_id=eq.${householdId}` }, () => {
         setShowSavedToast(true);
         setTimeout(() => setShowSavedToast(false), 3500);
         load();
@@ -306,10 +308,10 @@ export default function Dashboard() {
     !(anyVal(['cash_liquid_total']) != null || anyVal(['emergency_savings_liquid']) != null),
   ].reduce((acc, isMissing) => acc + (isMissing ? 1 : 0), 0);
   // Show hint only if overrides are present AND components are missing (i.e., override is actually in use)
-  const componentsAssetsPresent = (slotsAny?.home_value?.value != null) || (slotsAny?.investments_ex_home_total?.value != null) || (slotsAny?.cash_liquid_total?.value != null) || (slotsAny?.pension_balance_total?.value != null);
-  const componentsLiabsPresent = (slotsAny?.mortgage_balance?.value != null) || (slotsAny?.other_debt_balances_total?.value != null);
-  const assetsOverrideUsed = (slotsAny?.assets_total?.value != null) && !componentsAssetsPresent;
-  const debtsOverrideUsed = (slotsAny?.debts_total?.value != null) && !componentsLiabsPresent;
+  // const componentsAssetsPresent = (slotsAny?.home_value?.value != null) || (slotsAny?.investments_ex_home_total?.value != null) || (slotsAny?.cash_liquid_total?.value != null) || (slotsAny?.pension_balance_total?.value != null);
+  // const componentsLiabsPresent = (slotsAny?.mortgage_balance?.value != null) || (slotsAny?.other_debt_balances_total?.value != null);
+  // const assetsOverrideUsed = (slotsAny?.assets_total?.value != null) && !componentsAssetsPresent;
+  // const debtsOverrideUsed = (slotsAny?.debts_total?.value != null) && !componentsLiabsPresent;
   // const hasNwOverrides = assetsOverrideUsed || debtsOverrideUsed; // presently unused
 
   return (
@@ -338,16 +340,16 @@ export default function Dashboard() {
               <span>Missing items</span>
             </div>
           )}
-          <button
+          <Button
             onClick={() => setShowUserData(v => !v)}
-            className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border bg-white hover:bg-gray-50 text-xs shadow-sm shrink-0"
+            variant="secondary"
             aria-pressed={showUserData}
             title="Review the data used for your calculations"
           >
             {showUserData ? 'Hide data' : 'Review data'}
-          </button>
+          </Button>
           {householdId && entitlements?.plan === 'premium' && (
-            <button
+            <Button
               onClick={async () => {
                 try {
                   const res = await fetch('/api/billing/create-portal-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId }) });
@@ -355,13 +357,13 @@ export default function Dashboard() {
                   if (j?.url) window.location.href = j.url;
                 } catch {}
               }}
-              className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border bg-white hover:bg-gray-50 text-xs shadow-sm"
+              variant="secondary"
             >
               Manage plan
-            </button>
+            </Button>
           )}
           {householdId && entitlements?.plan !== 'premium' && (
-            <button
+            <Button
               onClick={async () => {
                 try {
                   const email = (latest as any)?.inputs?.slots?.email?.value || (latest as any)?.inputs?.email || data?.household?.email;
@@ -370,10 +372,9 @@ export default function Dashboard() {
                   if (j?.url) window.location.href = j.url;
                 } catch {}
               }}
-              className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border bg-gray-900 text-white hover:bg-gray-800 text-xs shadow-sm"
             >
               Upgrade
-            </button>
+            </Button>
           )}
         </div>
       </header>
@@ -385,38 +386,38 @@ export default function Dashboard() {
       )}
 
       {loading ? (
-        <div aria-busy="true" aria-live="polite" className="grid grid-cols-1 xl:grid-cols-5 gap-4 animate-pulse">
-          <div className="xl:col-span-5 bg-white border rounded-xl shadow-sm h-36" />
-          <div className="xl:col-span-3 bg-white border rounded-xl shadow-sm h-64" />
-          <div className="xl:col-span-2 bg-white border rounded-xl shadow-sm h-64" />
-          <div className="xl:col-span-5 bg-white border rounded-xl shadow-sm h-28" />
-          <div className="xl:col-span-5 bg-white border rounded-xl shadow-sm h-72" />
+        <div aria-busy="true" aria-live="polite" className="grid grid-cols-1 xl:grid-cols-5 gap-6 animate-pulse">
+          <div className="xl:col-span-5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm h-36" />
+          <div className="xl:col-span-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm h-64" />
+          <div className="xl:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm h-64" />
+          <div className="xl:col-span-5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm h-28" />
+          <div className="xl:col-span-5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm h-72" />
         </div>
       ) : (
         showUserData ? (
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
             <div className="xl:col-span-5">
-              <Card className="p-4">
+              <Card>
                 <div className="flex items-center justify-between mb-3">
-                  <div className="text-sm text-gray-600 font-medium">Your data (for calculations)</div>
-                  <div className="text-xs text-gray-500">Spot anything off? Edit via chat</div>
+                  <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Your data (for calculations)</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Spot anything off? Edit via chat</div>
                 </div>
                 <UserDataCard latest={latest} currency={currency} />
               </Card>
             </div>
           </div>
         ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
           {/* ===== Net Worth (full width) ===== */}
           <div className="xl:col-span-5">
-            <Card className="p-3">
+            <Card>
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="text-xs text-gray-600">Net worth</div>
+                  <div className="text-xs text-gray-700 dark:text-gray-300">Net worth</div>
                   <div className="text-2xl font-semibold leading-tight">
                     {Number.isFinite(last as number) ? fmtCurrency(last as number, currency) : '—'}
                   </div>
-                  <div className="text-[11px] text-gray-600 mt-1">
+                  <div className="text-[11px] text-gray-600 dark:text-gray-400 mt-1">
                     {series?.length ? (
                       <>
                         Updated{' '}
@@ -448,12 +449,12 @@ export default function Dashboard() {
 
           {/* ===== Level (full width below net worth) ===== */}
           <div className="xl:col-span-5">
-            <Card className="p-3">
+            <Card>
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="text-xs text-gray-600">Level</div>
+                  <div className="text-xs text-gray-700 dark:text-gray-300">Level</div>
                   <div className="text-sm font-semibold leading-tight">Level {overallIdx} — {overallLevelLabel}</div>
-                  <div className="text-xs text-gray-600 mt-1">{LEVEL_DESCRIPTIONS[overallIdx - 1]}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{LEVEL_DESCRIPTIONS[overallIdx - 1]}</div>
                 </div>
               </div>
               {/* Journey bar across full width with 10 steps labeled 1-10 */}
@@ -474,12 +475,12 @@ export default function Dashboard() {
                     return <div key={i} className={`h-2 flex-1 rounded ${cls}`} title={`Level ${i+1} — ${getProsperLevelLabel(i+1)}`} />;
                   })}
                 </div>
-                <div className="grid grid-cols-10 gap-1 mt-1 text-[9px] leading-3 text-gray-600 text-center">
+                <div className="grid grid-cols-10 gap-1 mt-1 text-[9px] leading-3 text-gray-600 dark:text-gray-400 text-center">
                   {Array.from({ length: 10 }).map((_, i) => (
                     <div key={i} className="truncate" title={`Level ${i+1} — ${getProsperLevelLabel(i+1)}`}>{LEVEL_SHORT_NAMES[i]}</div>
                   ))}
                 </div>
-                <div className="mt-1 text-[11px] text-gray-700">
+                <div className="mt-1 text-[11px] text-gray-700 dark:text-gray-300">
                   Next: Level {Math.min(10, overallIdx + 1)} — {LEVEL_SHORT_NAMES[Math.min(9, overallIdx)]}. {LEVEL_DESCRIPTIONS[Math.min(9, overallIdx)]}
                 </div>
               </div>
@@ -488,9 +489,9 @@ export default function Dashboard() {
 
           {/* ===== Progress insights ===== */}
           <div className="xl:col-span-5">
-            <Card className="p-3">
+            <Card>
               <div className="flex items-center justify-between mb-2">
-                <div className="text-sm text-gray-600 font-medium">Progress insights</div>
+                <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Progress insights</div>
               </div>
               <ProgressInsights kpis={kpis} />
             </Card>
@@ -500,9 +501,9 @@ export default function Dashboard() {
 
           {/* ===== Action Plan (single card: uncompleted first, completed at bottom) ===== */}
           <div className="xl:col-span-5">
-            <Card className="p-3">
+            <Card>
               <div className="flex items-center justify-between mb-2">
-                <div className="text-sm text-gray-600 font-medium">Action plan</div>
+                <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Action plan</div>
               </div>
               <ActionPlan recs={recs} />
             </Card>
@@ -512,7 +513,7 @@ export default function Dashboard() {
 
           {/* ===== KPI Grid (by pillar, sorted by urgency) ===== */}
           <div className="xl:col-span-5">
-            <Card className="p-3">
+            <Card>
               <KpiGrid kpis={kpis} />
             </Card>
           </div>
@@ -542,11 +543,6 @@ export default function Dashboard() {
 }
 
 /** ===== Small presentational components ===== */
-
-/** Small card wrapper for consistent styling */
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`bg-white border rounded-xl shadow-sm ${className}`}>{children}</div>;
-}
 
 function V2KpiBar({
   label,
@@ -584,18 +580,18 @@ function V2KpiBar({
   const targetText = format === "pct" ? fmtPct(target) : format === "months" ? `${target} mo` : String(target);
 
   return (
-    <div className="border rounded-lg p-3 bg-white" title={tooltip || undefined}>
-      <div className="text-xs text-gray-600">{label}</div>
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm" title={tooltip || undefined}>
+      <div className="text-xs text-gray-700 dark:text-gray-300">{label}</div>
       <div className="flex items-baseline justify-between mt-0.5">
         <div className="text-lg font-semibold">{fmt(raw)}</div>
-        <div className="text-[11px] text-gray-500">{subtitle ?? (dir === "higher" ? `Target ≥ ${targetText}` : `Target ≤ ${targetText}`)}</div>
+        <div className="text-[11px] text-gray-600 dark:text-gray-400">{subtitle ?? (dir === "higher" ? `Target ≥ ${targetText}` : `Target ≤ ${targetText}`)}</div>
       </div>
-      <div className="mt-2 h-1.5 w-full rounded bg-gray-200">
+      <div className="mt-2 h-1.5 w-full rounded bg-gray-200 dark:bg-gray-700">
         <div className={`h-1.5 rounded ${barColor}`} style={{ width: `${Math.round(progress * 100)}%` }} />
       </div>
       <div className="mt-2 text-[11px]">
         <button
-          className="underline text-gray-600 hover:text-gray-800"
+          className="underline text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100"
           onClick={() => {
             const explain = `Explain my ${label.toLowerCase()}: current is ${fmt(raw)} vs target ${targetText}. Why this matters and 2 ways to improve, please.`;
             try { window.dispatchEvent(new CustomEvent('pp:open_chat', { detail: { text: explain } })); } catch {}
@@ -684,7 +680,7 @@ function ActionPlan({ recs }: { recs: any }) {
   const Item = ({
     title, why, how, unlocks, completed,
   }: { title: string; why?: any; how?: any; unlocks?: any; completed?: boolean }) => (
-    <div className="border rounded-md p-2 bg-white">
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-sm font-medium text-gray-800 truncate">
@@ -707,7 +703,7 @@ function ActionPlan({ recs }: { recs: any }) {
           {!completed ? (
             <>
               <button
-                className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700"
                 onClick={() => {
                   const prompt = typeof how === 'string' ? how : Array.isArray(how) ? how.join('\n') : title;
                   const text = `Can you help me with: ${title}?\n${prompt}`;
@@ -717,13 +713,13 @@ function ActionPlan({ recs }: { recs: any }) {
                 Open in chat
               </button>
               <button
-                className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700"
                 onClick={() => markDone(title)}
               >
                 Mark done
               </button>
               <button
-                className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700"
                 onClick={() => dismiss(title)}
                 title="Remove from plan"
               >
@@ -732,7 +728,7 @@ function ActionPlan({ recs }: { recs: any }) {
             </>
           ) : (
             <button
-              className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+              className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700"
               onClick={() => {
                 const text = `I completed: ${title}. What should I do next?`;
                 try { window.dispatchEvent(new CustomEvent('pp:open_chat', { detail: { text } })); } catch {}
@@ -776,7 +772,7 @@ function ActionPlan({ recs }: { recs: any }) {
       {completedExtra.length > 0 && (
         <div className="pt-1">
           {completedExtra.map((it) => (
-            <div key={it.id} className="border rounded-md p-2 bg-white flex items-center justify-between">
+            <div key={it.id} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm flex items-center justify-between">
               <div>
                 <div className="text-sm font-medium text-gray-800">{it.title || 'Action'}</div>
                 <div className="text-[11px] text-gray-500">{it.completed_at ? (
@@ -786,7 +782,7 @@ function ActionPlan({ recs }: { recs: any }) {
                 ) : ''}</div>
               </div>
               <button
-                className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700"
                 onClick={() => {
                   const text = `I completed: ${it.title}. What should I do next?`;
                   try { window.dispatchEvent(new CustomEvent('pp:open_chat', { detail: { text } })); } catch {}
@@ -795,7 +791,7 @@ function ActionPlan({ recs }: { recs: any }) {
                 Ask what’s next
               </button>
               <button
-                className="ml-2 text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                className="ml-2 text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700"
                 onClick={() => dismiss(it.title || '')}
                 title="Remove from plan"
               >
@@ -1107,7 +1103,7 @@ function UserDataCard({ latest, currency }: { latest: Snapshot | null; currency:
                 </div>
                 <div className={`text-sm font-medium ${isMissing ? 'text-gray-400' : 'text-gray-800'}`}>{fmtAny(it.kind, v)}</div>
               </div>
-              <button className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50 shrink-0" onClick={(e) => { e.stopPropagation(); startEdit(it.label, it.key, it.kind, v); }}>
+              <button className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 shrink-0" onClick={(e) => { e.stopPropagation(); startEdit(it.label, it.key, it.kind, v); }}>
                 {isMissing ? 'Add' : 'Edit'}
               </button>
             </div>
@@ -1155,7 +1151,7 @@ function UserDataCard({ latest, currency }: { latest: Snapshot | null; currency:
               />
             )}
             <div className="mt-3 flex justify-end gap-2">
-              <button className="text-xs px-3 py-1.5 rounded border bg-white hover:bg-gray-50" onClick={() => setEditing(null)}>Cancel</button>
+              <button className="text-xs px-3 py-1.5 rounded border bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700" onClick={() => setEditing(null)}>Cancel</button>
               <button className="text-xs px-3 py-1.5 rounded border bg-gray-900 text-white hover:bg-gray-800" onClick={saveEdit} disabled={savingKey === editing.key}>Save</button>
             </div>
           </div>
@@ -1214,7 +1210,7 @@ function RangeNetWorth({ series, latest, currency }: { series: SeriesPoint[]; la
           <button
             key={r}
             onClick={() => setRange(r)}
-            className={`px-2 py-1 rounded border ${range===r ? 'bg-gray-900 text-white border-gray-900' : 'bg-white hover:bg-gray-50'}`}
+            className={`px-2 py-1 rounded border ${range===r ? 'bg-gray-900 text-white border-gray-900' : 'bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700'}`}
           >
             {r.toUpperCase()}
           </button>
@@ -1288,7 +1284,7 @@ function KpiGrid({ kpis }: { kpis: any }) {
           <button
             key={p}
             onClick={() => setFilter(p)}
-            className={`px-2 py-1 rounded border ${filter===p ? 'bg-gray-900 text-white border-gray-900' : 'bg-white hover:bg-gray-50'}`}
+            className={`px-2 py-1 rounded border ${filter===p ? 'bg-gray-900 text-white border-gray-900' : 'bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700'}`}
           >
             {p === 'all' ? 'All' : p.charAt(0).toUpperCase() + p.slice(1)}
           </button>
