@@ -26,7 +26,7 @@ export default function HomePage() {
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 -z-10">
-          <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-[1200px] -translate-x-1/2 rounded-full bg-gradient-to-tr from-emerald-200 via-sky-200 to-indigo-200 blur-3xl opacity-60" />
+          <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-[1200px] -translate-x-1/2 rounded-full bg-gradient-to-tr from-emerald-300 via-sky-200 to-indigo-300 blur-3xl opacity-70" />
         </div>
         <div className="max-w-7xl mx-auto px-4 pt-16 pb-12 text-center">
           <h1 className="text-4xl md:text-6xl font-semibold tracking-tight">
@@ -129,6 +129,25 @@ export default function HomePage() {
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
             <div className="text-sm font-medium">Friendly + private</div>
             <div className="text-sm text-gray-700 mt-1">No jargon, no judgment. Delete anytime.</div>
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      <section id="testimonials" className="max-w-7xl mx-auto px-4 py-12">
+        <h2 className="text-2xl md:text-3xl font-semibold text-center">What people are saying</h2>
+        <div className="mt-6 grid md:grid-cols-3 gap-6">
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <p className="text-sm text-gray-700">“Prosper helped me create a plan I can actually stick to.”</p>
+            <div className="mt-3 text-sm font-medium text-gray-900">— Alex P.</div>
+          </div>
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <p className="text-sm text-gray-700">“The KPIs made it so easy to see where I stand.”</p>
+            <div className="mt-3 text-sm font-medium text-gray-900">— Jamie L.</div>
+          </div>
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <p className="text-sm text-gray-700">“I finally feel on top of my money goals.”</p>
+            <div className="mt-3 text-sm font-medium text-gray-900">— Taylor R.</div>
           </div>
         </div>
       </section>
