@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import supabase from "@/app/lib/supabaseServer";
+import { z, parseJson } from "@/app/api/_lib/validation";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const schema = z.object({
+      householdId: z.string().uuid().optional(),
+      title: z.string().min(1).max(300).optional(),
+      action_id: z.string().min(1).max(200).optional(),
+      notes: z.string().max(2000).optional(),
+    });
+    const parsed = await parseJson(req, schema);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.data as z.infer<typeof schema>;
     const cookieStore = await cookies();
     const cookieId = cookieStore.get("pp_household_id")?.value;
     const householdId: string | undefined = body?.householdId || cookieId;
@@ -34,4 +43,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'bad_request', detail: e?.message || 'failed' }, { status: 400 });
   }
 }
-

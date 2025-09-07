@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { z, parseJson } from "@/app/api/_lib/validation";
 
 // Proxy endpoint for the OpenAI Responses API
 export async function POST(req: NextRequest) {
-  const body = await req.json();
+  const schema = z.any();
+  const parsed = await parseJson(req, schema);
+  if (!parsed.ok) return parsed.res;
+  const body = parsed.data;
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 

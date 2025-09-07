@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "@/app/lib/supabaseServer";
+import { z, parseJson } from "@/app/api/_lib/validation";
+
+const BodySchema = z.object({
+  householdId: z.string().uuid(),
+  email: z.string().email().optional(),
+  full_name: z.string().min(1).max(200).optional(),
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const householdId: string | undefined = body?.householdId;
-    const email: string | undefined = body?.email;
-    const full_name: string | undefined = body?.full_name;
+    const parsed = await parseJson(req, BodySchema);
+    if (!parsed.ok) return parsed.res;
+    const { householdId, email, full_name } = parsed.data as z.infer<typeof BodySchema>;
     if (!householdId) return NextResponse.json({ error: 'household_id_required' }, { status: 400 });
 
     // Ensure row exists; upsert only provided fields to avoid clobbering
@@ -26,4 +32,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'bad_request', detail: e?.message || 'failed' }, { status: 400 });
   }
 }
-

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "@/app/lib/supabaseServer";
+import { z, parseJson } from "@/app/api/_lib/validation";
 
 function formEncode(obj: Record<string, any>, prefix = ""): string {
   const pairs: string[] = [];
@@ -20,16 +21,21 @@ function formEncode(obj: Record<string, any>, prefix = ""): string {
   return pairs.join("&");
 }
 
+const BodySchema = z.object({
+  householdId: z.string().uuid(),
+  interval: z.enum(['monthly','annual']).optional(),
+  priceId: z.string().optional(),
+  email: z.string().email().optional(),
+});
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const householdId: string | undefined = body?.householdId;
-    const interval: 'monthly'|'annual' | undefined = body?.interval;
-    const priceIdFromBody: string | undefined = body?.priceId;
+    const parsed = await parseJson(req, BodySchema);
+    if (!parsed.ok) return parsed.res;
+    const { householdId, interval, priceId: priceIdFromBody, email } = parsed.data as z.infer<typeof BodySchema>;
     const priceMonthly = process.env.STRIPE_PRICE_ID_MONTHLY;
     const priceAnnual = process.env.STRIPE_PRICE_ID_ANNUAL;
     const priceId: string | undefined = priceIdFromBody || (interval === 'annual' ? (priceAnnual || priceMonthly) : priceMonthly);
-    const email: string | undefined = body?.email;
     const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const stripeKey = process.env.STRIPE_SECRET_KEY;
     if (!stripeKey) return NextResponse.json({ error: 'billing_not_configured' }, { status: 501 });

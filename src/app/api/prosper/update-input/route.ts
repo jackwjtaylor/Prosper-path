@@ -4,13 +4,15 @@ import supabase from "@/app/lib/supabaseServer";
 import { computeKpisV2 } from "@/app/lib/kpiEngine";
 import { assignLevelsV2 } from "@/app/lib/levelEngine";
 import { generateTwoBestActions } from "@/app/lib/recommendationsV2";
+import { z, parseJson } from "@/app/api/_lib/validation";
+import { rateLimit } from "@/app/api/_lib/rateLimit";
 
-type Body = {
-  householdId?: string;
-  key: string;
-  value: any;
-  kind?: 'money'|'percent'|'number'|'bool'|'text';
-};
+const BodySchema = z.object({
+  householdId: z.string().uuid().optional(),
+  key: z.string().min(1).max(100),
+  value: z.any(),
+  kind: z.enum(['money','percent','number','bool','text']).optional(),
+});
 
 function parseValue(raw: any, kind?: string): any {
   if (kind === 'bool') return raw === true || raw === 'true' || raw === 'yes' || raw === '1';
@@ -32,11 +34,16 @@ function parseValue(raw: any, kind?: string): any {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as Body;
+    const parsed = await parseJson(req, BodySchema);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.data as z.infer<typeof BodySchema>;
     const cookieStore = await cookies();
     const cookieId = cookieStore.get('pp_household_id')?.value;
     const householdId = body.householdId || cookieId;
     if (!householdId) return NextResponse.json({ error: 'household_id_required' }, { status: 400 });
+
+    const rl = await rateLimit(req, 'snapshot', { limit: 20, windowMs: 60_000, keyParts: [householdId] });
+    if (!rl.ok) return rl.res;
 
     // Ensure household row exists (FK on snapshots)
     try {

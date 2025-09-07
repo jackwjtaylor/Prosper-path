@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "@/app/lib/supabaseServer";
+import { z, parseQuery } from "@/app/api/_lib/validation";
 
 export async function GET(req: NextRequest) {
   const dev = process.env.NEXT_PUBLIC_DEV_ROUTES === '1';
@@ -9,6 +10,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
   try {
+    // Optional simple pagination in future could be validated here via parseQuery
     const { data, error } = await supabase
       .from('feedback')
       .select('id, created_at, household_id, name, email, category, severity, message, page_url, status, priority')
@@ -20,4 +22,3 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'bad_request', detail: e?.message || 'failed' }, { status: 400 });
   }
 }
-

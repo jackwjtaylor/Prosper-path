@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import supabase from "@/app/lib/supabaseServer";
+import { z, parseQuery } from "@/app/api/_lib/validation";
 
 export async function GET(req: NextRequest) {
   try {
-    const url = new URL(req.url);
-    const qId = url.searchParams.get('householdId');
+    const q = parseQuery(req, z.object({ householdId: z.string().uuid().optional() }));
+    if (!('ok' in q) || !q.ok) return q.res;
+    const qId = q.data.householdId;
     const cookieStore = await cookies();
     const cId = cookieStore.get("pp_household_id")?.value;
     const householdId = qId || cId;
@@ -23,4 +25,3 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'bad_request', detail: e?.message || 'failed' }, { status: 400 });
   }
 }
-

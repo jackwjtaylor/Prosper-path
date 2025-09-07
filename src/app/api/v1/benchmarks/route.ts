@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z, parseQuery } from "@/app/api/_lib/validation";
 
 type Cohort = {
   country: string;
@@ -142,13 +143,22 @@ function syntheticBenchmarks(cohort: Cohort, metrics: MetricKey[]): { n: number;
 }
 
 export async function GET(req: NextRequest) {
-  const url = new URL(req.url);
-  const country = (url.searchParams.get('country') || 'UK').toUpperCase();
-  const age = parseIntOrNull(url.searchParams.get('age'));
-  const home = (url.searchParams.get('home') || undefined) as any;
-  const incomeBand = normaliseIncomeBand(url.searchParams.get('income') || undefined);
-  const depBucket = dependantsBucket(url.searchParams.get('dependants'));
-  let metrics = (url.searchParams.get('metrics') || 'level,sr,ef_months,dsr_total,dti,invnw,rrr').split(',').map(s => s.trim()).filter(Boolean) as MetricKey[];
+  const q = parseQuery(req, z.object({
+    country: z.string().optional(),
+    age: z.string().optional(),
+    home: z.enum(['own','rent','other']).optional(),
+    income: z.string().optional(),
+    dependants: z.string().optional(),
+    metrics: z.string().optional(),
+  }));
+  if (!('ok' in q) || !q.ok) return q.res;
+  const params = q.data as any;
+  const country = (params.country || 'UK').toUpperCase();
+  const age = parseIntOrNull(params.age ?? null);
+  const home = (params.home || undefined) as any;
+  const incomeBand = normaliseIncomeBand(params.income || undefined);
+  const depBucket = dependantsBucket(params.dependants || undefined);
+  let metrics = (params.metrics || 'level,sr,ef_months,dsr_total,dti,invnw,rrr').split(',').map((s: string) => s.trim()).filter(Boolean) as MetricKey[];
   metrics = metrics.filter(m => ['level','sr','ef_months','dsr_total','dti','invnw','rrr'].includes(m));
   if (metrics.length === 0) metrics = ['level','sr','ef_months'];
 
@@ -173,4 +183,3 @@ export async function GET(req: NextRequest) {
   };
   return NextResponse.json(body, { status: 200 });
 }
-

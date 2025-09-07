@@ -1,21 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import supabase from "@/app/lib/supabaseServer";
+import { z, parseJson } from "@/app/api/_lib/validation";
 
-type FBBody = {
-  householdId?: string;
-  name?: string;
-  email?: string;
-  category?: string; // bug | idea | ux | performance | other
-  severity?: string; // low | med | high | critical
-  message?: string;
-  page_url?: string;
-  extra?: Record<string, any>;
-};
+const FBBody = z.object({
+  householdId: z.string().uuid().optional(),
+  name: z.string().max(200).optional(),
+  email: z.string().email().optional(),
+  category: z.string().max(50).optional(),
+  severity: z.string().max(50).optional(),
+  message: z.string().max(5000).optional(),
+  page_url: z.string().max(1000).optional(),
+  extra: z.record(z.any()).optional(),
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as FBBody;
+    const parsed = await parseJson(req, FBBody);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.data as z.infer<typeof FBBody>;
     const cookieStore = await cookies();
     const cookieId = cookieStore.get("pp_household_id")?.value;
     const householdId = body.householdId || cookieId || null;
@@ -59,4 +62,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'bad_request', detail: e?.message || 'failed' }, { status: 400 });
   }
 }
-

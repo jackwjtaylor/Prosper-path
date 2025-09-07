@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import supabase from '@/app/lib/supabaseServer';
 import { getAuthUser } from '@/app/lib/auth';
+import { rateLimit } from "@/app/api/_lib/rateLimit";
 
 const COOKIE = 'pp_household_id';
 const ONE_YEAR = 60 * 60 * 24 * 365;
 
 export async function POST(req: NextRequest) {
+  // Rate limit linking attempts per IP
+  const rl = await rateLimit(req, 'login_flow', { limit: 10, windowMs: 60_000 });
+  if (!rl.ok) return rl.res;
   // Ensure an authenticated user has an owned household and align cookie
   const user = await getAuthUser(req);
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -61,4 +65,3 @@ export async function POST(req: NextRequest) {
   });
   return res;
 }
-

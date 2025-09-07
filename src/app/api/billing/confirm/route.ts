@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "@/app/lib/supabaseServer";
+import { z, parseQuery } from "@/app/api/_lib/validation";
 
 export async function GET(req: NextRequest) {
   try {
-    const url = new URL(req.url);
-    const sessionId = url.searchParams.get('session_id');
+    const q = parseQuery(req, z.object({ session_id: z.string().min(1) }));
+    if (!('ok' in q) || !q.ok) return q.res;
+    const sessionId = q.data.session_id;
     if (!sessionId) return NextResponse.json({ error: 'session_id_required' }, { status: 400 });
     const stripeKey = process.env.STRIPE_SECRET_KEY;
     if (!stripeKey) return NextResponse.json({ error: 'billing_not_configured' }, { status: 501 });

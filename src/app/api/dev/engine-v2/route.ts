@@ -3,6 +3,7 @@ import { computeKpisV2 } from "@/app/lib/kpiEngine";
 import { assignLevelsV2 } from "@/app/lib/levelEngine";
 import type { Slots } from "@/app/lib/schema/slots";
 import type { KpisV2, GatesV2 } from "@/app/lib/kpiEngine";
+import { z, parseQuery } from "@/app/api/_lib/validation";
 
 function scenarioA(): Slots {
   // Renter starter
@@ -125,9 +126,11 @@ export async function GET(req: NextRequest) {
   if (process.env.NEXT_PUBLIC_DEV_ROUTES !== '1') {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
+  const q = parseQuery(req, z.object({ scenario: z.string().optional(), validate: z.string().optional() }));
+  if (!('ok' in q) || !q.ok) return q.res;
   const url = new URL(req.url);
-  const name = (url.searchParams.get('scenario') || 'A').toUpperCase();
-  const validate = url.searchParams.get('validate');
+  const name = ((q.data.scenario || 'A') as string).toUpperCase();
+  const validate = q.data.validate;
 
   const make = (n: 'A'|'B'|'C') => {
     const s = n === 'B' ? scenarioB() : n === 'C' ? scenarioC() : scenarioA();

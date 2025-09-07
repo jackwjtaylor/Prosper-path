@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import supabase from "@/app/lib/supabaseServer";
 import { assertHouseholdAccess } from "@/app/lib/auth";
+import { z, parseQuery } from "@/app/api/_lib/validation";
+import { rateLimit } from "@/app/api/_lib/rateLimit";
 
 export async function GET(req: NextRequest) {
   // Require household cookie; in the next step we will require an authenticated user and ownership check
-  const url = new URL(req.url);
-  const qId = url.searchParams.get("householdId");
+  const q = parseQuery(req, z.object({ householdId: z.string().uuid().optional() }));
+  if (!('ok' in q) || !q.ok) return q.res;
+  const qId = q.data.householdId;
   const cookieStore = await cookies();
   const cId = cookieStore.get("pp_household_id")?.value;
   const householdId = qId || cId;
@@ -14,6 +17,10 @@ export async function GET(req: NextRequest) {
   if (!householdId) {
     return NextResponse.json({ error: "household_id_required" }, { status: 400 });
   }
+
+  // Rate limit dashboard fetches per IP+household
+  const rl = await rateLimit(req, 'dashboard', { limit: 60, windowMs: 60_000, keyParts: [householdId] });
+  if (!rl.ok) return rl.res;
 
   // AuthZ: user must own this household (or household has no user bound yet)
   const authz = await assertHouseholdAccess(req, householdId);

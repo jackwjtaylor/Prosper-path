@@ -118,6 +118,15 @@ The main pattern demonstrated:
 - Start the server with `npm run dev`
 - Open your browser to [http://localhost:3000](http://localhost:3000). It should default to the `chatSupervisor` Agent Config.
 
+## Security Hardening
+
+- Input validation: All API routes now validate request bodies and queries with Zod. Malformed requests return HTTP 400 with concise error details.
+- Rate limiting: A lightweight limiter protects login flow endpoints, snapshot creation, and dashboard fetches. Defaults use an in-memory store; you can configure Upstash Redis via `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to persist limits across instances.
+- Defaults (tuned in code):
+  - Dashboard: 60/min per IP+household
+  - Snapshot creation: 20/min per IP+household
+  - Login flow: 10/min per IP
+
 # Agentic Pattern 1: Chat-Supervisor
 
 This is demonstrated in the [chatSupervisor](src/app/agentConfigs/chatSupervisor/index.ts) Agent Config. The chat agent uses the realtime model to converse with the user and handle basic tasks, like greeting the user, casual conversation, and collecting information, and a more intelligent, text-based supervisor model (e.g. `gpt-4.1`) is used extensively to handle tool calls and more challenging responses. You can control the decision boundary by "opting in" specific tasks to the chat agent as desired.

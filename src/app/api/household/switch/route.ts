@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import supabase from '@/app/lib/supabaseServer';
+import { z, parseQuery } from "@/app/api/_lib/validation";
 
 const COOKIE = 'pp_household_id';
 const ONE_YEAR = 60 * 60 * 24 * 365;
@@ -10,8 +11,9 @@ function isUuid(v: string): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  const url = new URL(req.url);
-  const id = (url.searchParams.get('householdId') || url.searchParams.get('id') || '').trim();
+  const q = parseQuery(req, z.object({ householdId: z.string().uuid().optional(), id: z.string().uuid().optional() }));
+  if (!('ok' in q) || !q.ok) return q.res;
+  const id = (q.data.householdId || q.data.id || '').trim();
   if (!id || !isUuid(id)) {
     return NextResponse.json({ error: 'invalid_household_id' }, { status: 400 });
   }
@@ -29,4 +31,3 @@ export async function GET(req: NextRequest) {
   cookieStore.set({ name: COOKIE, value: id, httpOnly: true, sameSite: 'lax', maxAge: ONE_YEAR, path: '/' });
   return res;
 }
-

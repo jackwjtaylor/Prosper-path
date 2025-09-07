@@ -5,6 +5,8 @@ import type { Slots } from "@/app/lib/schema/slots";
 import { computeKpisV2 } from "@/app/lib/kpiEngine";
 import { assignLevelsV2 } from "@/app/lib/levelEngine";
 import { assertHouseholdAccess } from "@/app/lib/auth";
+import { z, parseJson } from "@/app/api/_lib/validation";
+import { rateLimit } from "@/app/api/_lib/rateLimit";
 
 /**
  * POST /api/prosper/snapshots
@@ -13,13 +15,28 @@ import { assertHouseholdAccess } from "@/app/lib/auth";
  *
  * Accepts either { householdId } or { household_id } in the body for flexibility.
  */
+const BodySchema = z.object({
+  householdId: z.string().uuid().optional(),
+  household_id: z.string().uuid().optional(),
+  inputs: z.record(z.any()).optional(),
+  kpis: z.record(z.any()).optional(),
+  levels: z.record(z.any()).optional(),
+  recommendations: z.any().optional(),
+  provisional_keys: z.array(z.string()).optional(),
+});
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({} as any));
+    const parsed = await parseJson(req, BodySchema);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.data as z.infer<typeof BodySchema>;
     const cookieStore = await cookies();
     const cookieId = cookieStore.get('pp_household_id')?.value;
     const householdId: string | undefined = body.householdId || body.household_id || cookieId;
     if (!householdId) return NextResponse.json({ error: 'household_id_required' }, { status: 400 });
+
+    const rl = await rateLimit(req, 'snapshot', { limit: 20, windowMs: 60_000, keyParts: [householdId] });
+    if (!rl.ok) return rl.res;
 
     const authz = await assertHouseholdAccess(req, householdId);
     if (!authz.ok) return NextResponse.json({ error: 'unauthorized' }, { status: authz.code });

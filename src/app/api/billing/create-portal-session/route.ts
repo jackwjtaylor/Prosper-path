@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "@/app/lib/supabaseServer";
+import { z, parseJson } from "@/app/api/_lib/validation";
 
 function formEncode(obj: Record<string, any>): string {
   return Object.entries(obj)
@@ -8,10 +9,15 @@ function formEncode(obj: Record<string, any>): string {
     .join('&');
 }
 
+const BodySchema = z.object({
+  householdId: z.string().uuid(),
+});
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const householdId: string | undefined = body?.householdId;
+    const parsed = await parseJson(req, BodySchema);
+    if (!parsed.ok) return parsed.res;
+    const { householdId } = parsed.data as z.infer<typeof BodySchema>;
     if (!householdId) return NextResponse.json({ error: 'household_id_required' }, { status: 400 });
     const stripeKey = process.env.STRIPE_SECRET_KEY;
     if (!stripeKey) return NextResponse.json({ error: 'billing_not_configured' }, { status: 501 });
@@ -41,4 +47,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'bad_request', detail: e?.message || 'failed' }, { status: 400 });
   }
 }
-

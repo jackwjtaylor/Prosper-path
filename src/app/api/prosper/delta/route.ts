@@ -6,20 +6,27 @@ import { computeKpisV2 } from "@/app/lib/kpiEngine";
 import { assignLevelsV2 } from "@/app/lib/levelEngine";
 import { generateRecommendations } from "@/app/lib/prosperTools";
 import { assertHouseholdAccess } from "@/app/lib/auth";
+import { z, parseJson } from "@/app/api/_lib/validation";
+import { rateLimit } from "@/app/api/_lib/rateLimit";
 
-type DeltaBody = {
-  householdId?: string;
-  deltas: Record<string, number>; // slotName -> delta amount (can be negative)
-  confidences?: Record<string, 'low'|'med'|'high'>;
-};
+const DeltaBodySchema = z.object({
+  householdId: z.string().uuid().optional(),
+  deltas: z.record(z.number().finite()),
+  confidences: z.record(z.enum(['low','med','high'])).optional(),
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as DeltaBody;
+    const parsed = await parseJson(req, DeltaBodySchema);
+    if (!parsed.ok) return parsed.res;
+    const body = parsed.data as z.infer<typeof DeltaBodySchema>;
     const cookieStore = await cookies();
     const cookieId = cookieStore.get('pp_household_id')?.value;
     const householdId = body.householdId || cookieId;
     if (!householdId) return NextResponse.json({ error: 'household_id_required' }, { status: 400 });
+
+    const rl = await rateLimit(req, 'snapshot', { limit: 20, windowMs: 60_000, keyParts: [householdId] });
+    if (!rl.ok) return rl.res;
 
     const authz = await assertHouseholdAccess(req, householdId);
     if (!authz.ok) return NextResponse.json({ error: 'unauthorized' }, { status: authz.code });

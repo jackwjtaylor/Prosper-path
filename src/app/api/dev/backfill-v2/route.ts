@@ -3,6 +3,7 @@ import supabase from "@/app/lib/supabaseServer";
 import type { Slots } from "@/app/lib/schema/slots";
 import { computeKpisV2 } from "@/app/lib/kpiEngine";
 import { assignLevelsV2 } from "@/app/lib/levelEngine";
+import { z, parseQuery } from "@/app/api/_lib/validation";
 
 function inputsToSlotsFallback(inputs: Record<string, any>): Slots {
   const grossAnnual = Number.isFinite(inputs?.income_gross_monthly) ? inputs.income_gross_monthly * 12 : undefined;
@@ -25,8 +26,10 @@ export async function GET(req: NextRequest) {
   if (process.env.NEXT_PUBLIC_DEV_ROUTES !== '1') {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
+  const q = parseQuery(req, z.object({ householdId: z.string().uuid() }));
+  if (!('ok' in q) || !q.ok) return q.res;
   const url = new URL(req.url);
-  const householdId = url.searchParams.get('householdId');
+  const householdId = q.data.householdId as string;
   if (!householdId) return NextResponse.json({ error: 'householdId_required' }, { status: 400 });
 
   const { data: snaps, error } = await supabase
