@@ -1,82 +1,58 @@
 "use client";
-import React from 'react';
-import { getSupabaseClient } from '@/app/lib/supabaseClient';
 
+import { Auth } from "@supabase/auth-ui-react";
+import { ThemeSupa } from "@supabase/auth-ui-shared";
+import React from "react";
+import { getSupabaseClient } from "@/app/lib/supabaseClient";
+
+/**
+ * LoginPage provides a modern authentication experience using Supabase Auth UI.
+ * Users can sign in with OAuth providers like Google or GitHub or request
+ * a magic link via email. After authentication, Supabase redirects back to
+ * `/auth/callback` where account linking occurs.
+ */
 export default function LoginPage() {
-  const supa = getSupabaseClient();
-  const [email, setEmail] = React.useState('');
-  const [status, setStatus] = React.useState<string>('');
-  const [loading, setLoading] = React.useState(false);
+  const supabase = getSupabaseClient();
 
-  const sendLink = async () => {
-    if (!supa || !email.trim()) return;
-    setLoading(true);
-    setStatus('Sending magic link…');
-    try {
-      const redirectTo = new URL('/auth/callback', window.location.origin);
-      // Preserve requested destination; default home
-      redirectTo.searchParams.set('redirect', '/');
-      const { error } = await supa.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: redirectTo.toString() } });
-      if (error) setStatus('Failed to send link.');
-      else setStatus('Check your email for the magic link.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signOut = async () => {
-    if (!supa) return;
-    await supa.auth.signOut();
-    setStatus('Signed out.');
-  };
-
-  const ensureHousehold = async () => {
-    setStatus('Linking your household…');
-    try {
-      const sess = await supa?.auth.getSession();
-      const token = sess?.data?.session?.access_token;
-      const res = await fetch('/api/household/ensure', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      if (res.ok) setStatus('Household linked. You can close this tab.');
-      else setStatus('Failed to link household.');
-    } catch {
-      setStatus('Failed to link household.');
-    }
-  };
-
-  React.useEffect(() => {
-    // If redirected back with a session in URL, ensure household now
-    const doEnsure = async () => {
-      try { await ensureHousehold(); } catch {}
-    };
-    doEnsure();
-  }, []);
+  // Compute redirect URL on the client so Supabase knows where to send the user
+  // after authentication with third‑party providers or magic links.
+  const redirectTo =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/auth/callback?redirect=/`
+      : undefined;
 
   return (
-    <div className="max-w-md mx-auto p-6">
-      <h1 className="text-xl font-semibold mb-4">Sign in</h1>
-      <div className="space-y-3">
-        <input
-          type="email"
-          placeholder="you@example.com"
-          className="w-full border rounded px-3 py-2"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <button
-          className="w-full h-10 rounded bg-gray-900 text-white disabled:opacity-50"
-          onClick={sendLink}
-          disabled={loading || !email.trim()}
-        >
-          Send magic link
-        </button>
-        <button
-          className="w-full h-10 rounded border"
-          onClick={signOut}
-        >
-          Sign out
-        </button>
-        {status && <div className="text-sm text-gray-700">{status}</div>}
+    <div className="flex min-h-screen items-center justify-center bg-muted p-4">
+      <div className="w-full max-w-md rounded-md border bg-white p-8 shadow">
+        <h1 className="mb-6 text-center text-2xl font-semibold">Sign in</h1>
+        {supabase ? (
+          <Auth
+            supabaseClient={supabase}
+            providers={["google", "github"]}
+            redirectTo={redirectTo}
+            magicLink
+            view="magic_link"
+            showLinks={false}
+            appearance={{
+              theme: ThemeSupa,
+              variables: {
+                default: {
+                  colors: {
+                    brand: "#1d4ed8",
+                    brandAccent: "#1d4ed8",
+                  },
+                },
+              },
+            }}
+            socialLayout="vertical"
+          />
+        ) : (
+          <p className="text-center text-sm text-gray-600">
+            Supabase client not configured.
+          </p>
+        )}
       </div>
     </div>
   );
 }
+
