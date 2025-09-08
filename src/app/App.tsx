@@ -404,19 +404,6 @@ function App() {
           <Link href="/home" className="text-gray-700 hover:text-gray-900">Home</Link>
           <Link href="/pricing" className="text-gray-700 hover:text-gray-900">Pricing</Link>
           <Link href="/feedback" className="text-gray-700 hover:text-gray-900">Feedback</Link>
-          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('chat'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-gray-700 hover:text-gray-900">Chat</a>
-          <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('dashboard'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-gray-700 hover:text-gray-900">Dashboard</a>
-          {!isAuthed ? (
-            <Link href="/login" className="text-gray-700 hover:text-gray-900">Sign in</Link>
-          ) : (
-            <a
-              href="#"
-              onClick={async (e) => { e.preventDefault(); try { await getSupabaseClient()?.auth.signOut(); } catch {} setIsAuthed(false); }}
-              className="text-gray-700 hover:text-gray-900"
-            >
-              Sign out
-            </a>
-          )}
         </nav>
         <ProfileMenu
           householdId={householdId}
@@ -549,8 +536,10 @@ export default App;
 function ProfileMenu({ householdId, entitlements, household }: { householdId: string; entitlements: { plan: 'free'|'premium'; subscription_status?: string; current_period_end?: string } | null; household: { email?: string; full_name?: string } | null }) {
   const [open, setOpen] = React.useState(false);
   const [showEdit, setShowEdit] = React.useState(false);
+  const [showDelete, setShowDelete] = React.useState(false);
   const [fullName, setFullName] = React.useState(household?.full_name || '');
   const [email, setEmail] = React.useState(household?.email || '');
+  const [authed, setAuthed] = React.useState(false);
   React.useEffect(() => { setFullName(household?.full_name || ''); setEmail(household?.email || ''); }, [household?.full_name, household?.email]);
   React.useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -559,6 +548,15 @@ function ProfileMenu({ householdId, entitlements, household }: { householdId: st
     };
     document.addEventListener('click', onDoc);
     return () => document.removeEventListener('click', onDoc);
+  }, []);
+  React.useEffect(() => {
+    const supa = getSupabaseClient();
+    if (!supa) { setAuthed(false); return; }
+    (async () => {
+      try { const { data } = await supa.auth.getSession(); setAuthed(!!data?.session); } catch { setAuthed(false); }
+    })();
+    const { data: sub } = supa.auth.onAuthStateChange((_e, session) => setAuthed(!!session));
+    return () => { sub.subscription?.unsubscribe(); };
   }, []);
 
   const plan = entitlements?.plan || 'free';
@@ -582,6 +580,15 @@ function ProfileMenu({ householdId, entitlements, household }: { householdId: st
     try {
       await fetch('/api/household/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId, email, full_name: fullName }) });
       setShowEdit(false);
+    } catch {}
+  };
+  const deleteData = async () => {
+    try {
+      const res = await fetch('/api/household/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId }) });
+      if (res.ok) {
+        try { localStorage.removeItem('pp_household_id'); } catch {}
+        window.location.href = '/home';
+      }
     } catch {}
   };
 
@@ -620,6 +627,7 @@ function ProfileMenu({ householdId, entitlements, household }: { householdId: st
           <div className="py-1 text-sm">
             <button className="w-full text-left px-3 py-2 hover:bg-gray-50" onClick={() => { setShowEdit(true); setOpen(false); }}>Edit profile</button>
             <button className="w-full text-left px-3 py-2 hover:bg-gray-50" onClick={openUserData}>Review data</button>
+            <button className="w-full text-left px-3 py-2 hover:bg-gray-50 text-red-600" onClick={() => { setShowDelete(true); setOpen(false); }}>Delete my data…</button>
             {plan === 'premium' ? (
               <button className="w-full text-left px-3 py-2 hover:bg-gray-50" onClick={managePlan}>Manage plan</button>
             ) : (
@@ -629,6 +637,16 @@ function ProfileMenu({ householdId, entitlements, household }: { householdId: st
             <a className="block px-3 py-2 hover:bg-gray-50" href="/contact">Contact us</a>
             <a className="block px-3 py-2 hover:bg-gray-50" href="/terms" target="_blank" rel="noreferrer">Terms</a>
             <a className="block px-3 py-2 hover:bg-gray-50" href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
+            {!authed ? (
+              <a className="block px-3 py-2 hover:bg-gray-50" href="/login" onClick={() => setOpen(false)}>Sign in</a>
+            ) : (
+              <button
+                className="w-full text-left px-3 py-2 hover:bg-gray-50"
+                onClick={async () => { try { await getSupabaseClient()?.auth.signOut(); } catch {}; setOpen(false); }}
+              >
+                Log out
+              </button>
+            )}
           </div>
           <div className="px-3 py-2 border-t flex items-center justify-between">
             <div className="text-[11px] text-gray-500 truncate">ID: {householdId?.slice(0, 6)}…</div>
@@ -648,6 +666,22 @@ function ProfileMenu({ householdId, entitlements, household }: { householdId: st
             <div className="mt-3 flex justify-end gap-2">
               <button className="text-xs px-3 py-1.5 rounded border bg-white hover:bg-gray-50" onClick={() => setShowEdit(false)}>Cancel</button>
               <button className="text-xs px-3 py-1.5 rounded border bg-gray-900 text-white hover:bg-gray-800" onClick={saveProfile}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDelete && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setShowDelete(false)}>
+          <div className="bg-white rounded-lg border shadow-lg w-full max-w-sm p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="text-sm font-medium text-gray-900 mb-2">Delete my data</div>
+            <p className="text-xs text-gray-700">
+              This will permanently delete your household, snapshots, actions, and net-worth history from Prosper.
+            </p>
+            <p className="text-xs text-gray-700 mt-2">This cannot be undone.</p>
+            <div className="mt-3 flex justify-end gap-2">
+              <button className="text-xs px-3 py-1.5 rounded border bg-white hover:bg-gray-50" onClick={() => setShowDelete(false)}>Cancel</button>
+              <button className="text-xs px-3 py-1.5 rounded border bg-red-600 text-white hover:bg-red-700" onClick={deleteData}>Delete</button>
             </div>
           </div>
         </div>

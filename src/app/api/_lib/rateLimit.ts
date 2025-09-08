@@ -10,6 +10,35 @@ type Result = { ok: true; remaining: number; resetAt: number } | { ok: false; re
 
 const memoryStore: Map<string, { count: number; resetAt: number }> = new Map();
 
+async function limitWithUpstash(key: string, limit: number, windowMs: number): Promise<{ remaining: number; resetAt: number } | null> {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  try {
+    const commands = [
+      ["INCR", key],
+      ["PEXPIRE", key, String(windowMs), "NX"],
+      ["PTTL", key],
+    ];
+    const res = await fetch(`${url}/pipeline`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commands }),
+      // avoid Next caching
+      cache: 'no-store' as any,
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !Array.isArray(json)) return null;
+    const count = Number(json[0]?.result ?? json[0]);
+    const pttl = Number(json[2]?.result ?? json[2]);
+    const ttlMs = Number.isFinite(pttl) && pttl > 0 ? pttl : windowMs;
+    const resetAt = Date.now() + ttlMs;
+    return { remaining: Math.max(0, limit - count), resetAt };
+  } catch {
+    return null;
+  }
+}
+
 function getClientIp(req: NextRequest): string {
   const xff = req.headers.get('x-forwarded-for');
   if (xff) return xff.split(',')[0].trim();
@@ -56,12 +85,12 @@ export async function rateLimit(req: NextRequest, bucket: string, opts: Options)
   const windowMs = Math.max(1000, opts.windowMs);
   const key = buildKey(bucket, [ip, ...(opts.keyParts || [])]);
 
-  // In-memory limiter by default (works locally and in single-node)
-  const { remaining, resetAt } = limitInMemory(key, limit, windowMs);
+  // Prefer Upstash Redis if configured; fallback to in-memory
+  const redis = await limitWithUpstash(key, limit, windowMs);
+  const { remaining, resetAt } = redis || limitInMemory(key, limit, windowMs);
   if (remaining >= 0) {
     return { ok: true, remaining, resetAt };
   }
   const res = NextResponse.json({ error: 'rate_limited' }, { status: 429, headers: headers(0, limit, resetAt) });
   return { ok: false, res };
 }
-

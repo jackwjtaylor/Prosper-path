@@ -504,7 +504,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-2">
                 <div className="text-sm text-gray-600 font-medium">Action plan</div>
               </div>
-              <ActionPlan recs={recs} />
+              <ActionPlan recs={recs} kpis={kpis} />
             </Card>
           </div>
 
@@ -614,11 +614,13 @@ function V2KpiBar({
 // Removed unused NextActions component
 
 
-function ActionPlan({ recs }: { recs: any }) {
+function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
   const [householdId, setHouseholdId] = React.useState<string>("");
   const [completedItems, setCompletedItems] = React.useState<{ id: string; title?: string; completed_at?: string }[]>([]);
   const [completedTitles, setCompletedTitles] = React.useState<string[]>([]);
   const [dismissedTitles, setDismissedTitles] = React.useState<string[]>([]);
+  const [completedIds, setCompletedIds] = React.useState<string[]>([]);
+  const [dismissedIds, setDismissedIds] = React.useState<string[]>([]);
   React.useEffect(() => {
     (async () => {
       try {
@@ -626,81 +628,199 @@ function ActionPlan({ recs }: { recs: any }) {
         setHouseholdId(hh);
         const r = await fetch(`/api/actions/list?householdId=${hh}`, { cache: 'no-store' });
         const j = await r.json();
-        const arr = (j?.items || []) as { id: string; title?: string; completed_at?: string; status?: string }[];
+        const arr = (j?.items || []) as { id: string; title?: string; completed_at?: string; status?: string; action_id?: string }[];
         setCompletedItems(arr);
         setCompletedTitles(arr.filter(it => (it as any)?.status === 'done' || it.completed_at).map((it) => (it.title || '').toString().toLowerCase()).filter(Boolean));
         setDismissedTitles(arr.filter(it => (it as any)?.status === 'dismissed').map(it => (it.title || '').toString().toLowerCase()).filter(Boolean));
+        setCompletedIds(arr.filter(it => (it as any)?.status === 'done' || it.completed_at).map(it => (it as any)?.action_id).filter(Boolean) as string[]);
+        setDismissedIds(arr.filter(it => (it as any)?.status === 'dismissed').map(it => (it as any)?.action_id).filter(Boolean) as string[]);
       } catch {}
     })();
   }, []);
 
-  // Build recommendations array similar to NextActions
-  let arr: any[] = [];
-  if (Array.isArray(recs)) arr = recs;
-  else if (recs && typeof recs === 'object') arr = Object.values(recs).flat();
-  const recItems = (arr || []).map((r, i) => ({
-    key: `${(r?.title || r?.action || r?.label || `Action ${i+1}`).toString()}`,
-    title: r?.title || r?.action || r?.label || `Action ${i+1}`,
-    why: r?.why || r?.rationale || r?.reason,
-    how: r?.how || r?.steps || r?.next || r?.do,
-    unlocks: r?.unlocks || r?.moves_to || r?.next_level || null,
-  }));
+  // Prepare set of recommended ids from server recs to badge items
+  let recArr: any[] = [];
+  if (Array.isArray(recs)) recArr = recs;
+  else if (recs && typeof recs === 'object') recArr = Object.values(recs).flat();
+  const recIds = new Set<string>((recArr || []).map((r) => (r?.action_id || '').toString()).filter(Boolean));
+
+  // Build a full catalogue of possible actions and compute relevance
+  const gates = (kpis && typeof kpis === 'object' ? (kpis as any).gates : undefined) || {};
+  const K = kpis || {};
+  const fmt1 = (n: any, kind: 'pct'|'months'|'ratio'='pct') => {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return '—';
+    if (kind === 'pct') return `${Math.round(v*100)}%`;
+    if (kind === 'months') return `${(Math.round(v*10)/10).toFixed(1)} mo`;
+    return `${(Math.round(v*100)/100).toFixed(2)}`;
+  };
+  type Cat = { action_id: string; title: string; how: string[]; pillar: string; relevant: boolean; reason: string };
+  const catalogue: Cat[] = [];
+  function push(id: string, title: string, pillar: string, how: string[], relevant: boolean, reason: string) {
+    catalogue.push({ action_id: id, title, how, pillar, relevant, reason });
+  }
+  // Emergency fund ≥ 3 mo
+  {
+    const ef = K.ef_months as number | null | undefined;
+    const rel = Number.isFinite(ef as number) ? ((ef as number) < 3) : false;
+    const reason = (ef == null) ? 'Missing inputs: essential expenses and liquid savings.' : (rel ? `EF ${fmt1(ef,'months')} < 3mo` : `EF ${fmt1(ef,'months')} meets ≥3mo`);
+    push('SAVE_EMERGENCY_FUND_3M', 'Build emergency fund to 3 months', 'save', ['Open a high-yield savings bucket', 'Automate weekly transfer 5–10% of pay'], rel, reason);
+  }
+  // Non-mortgage DSR ≤ 10%
+  {
+    const nmdsr = K.nmdsr as number | null | undefined;
+    const rel = Number.isFinite(nmdsr as number) ? (nmdsr as number) > 0.10 : false;
+    const reason = (nmdsr == null) ? 'Missing inputs: net income and non-mortgage debt payments.' : (rel ? `NMDSR ${fmt1(nmdsr)} > 10%` : `NMDSR ${fmt1(nmdsr)} ≤ 10%`);
+    push('BORROW_NMDSR_LE_10PCT', 'Reduce non-mortgage debt servicing ≤ 10%', 'borrow', ['Consolidate high-APR balances', 'Automate overpayments on smallest balance'], rel, reason);
+  }
+  // Savings rate ≥ 20%
+  {
+    const sr = K.sr as number | null | undefined;
+    const rel = Number.isFinite(sr as number) ? (sr as number) < 0.20 : false;
+    const reason = (sr == null) ? 'Missing inputs: net income and total expenses.' : (rel ? `Savings rate ${fmt1(sr)} < 20%` : `Savings rate ${fmt1(sr)} ≥ 20%`);
+    push('SPEND_LIFT_SAVINGS_RATE_20PCT', 'Lift savings rate toward 20%', 'spend', ['Skim 1–2% from top categories', 'Increase auto‑investing by a set amount'], rel, reason);
+  }
+  // Housing ratio ≤ 40%
+  {
+    const hr = K.hr as number | null | undefined;
+    const rel = Number.isFinite(hr as number) ? (hr as number) > 0.40 : false;
+    const reason = (hr == null) ? 'Missing inputs: income and rent/mortgage + running costs.' : (rel ? `Housing ratio ${fmt1(hr)} > 40%` : `Housing ratio ${fmt1(hr)} ≤ 40%`);
+    push('SPEND_REDUCE_HOUSING_RATIO_40PCT', 'Reduce housing burden toward ≤ 40% of gross', 'spend', ['Negotiate rent/review utilities', 'Refinance or extend term if feasible', 'Trim 5–10% near term'], rel, reason);
+  }
+  // DSR total ≤ 20%
+  {
+    const dsr = K.dsr_total as number | null | undefined;
+    const rel = Number.isFinite(dsr as number) ? (dsr as number) > 0.20 : false;
+    const reason = (dsr == null) ? 'Missing inputs: net income and all required debt payments.' : (rel ? `Total DSR ${fmt1(dsr)} > 20%` : `Total DSR ${fmt1(dsr)} ≤ 20%`);
+    push('BORROW_REDUCE_DSR_TOTAL_20PCT', 'Lower total debt servicing toward ≤ 20% of income', 'borrow', ['Refinance to lower APR', 'Pause non‑essential spend', 'Redirect freed cash to highest APR'], rel, reason);
+  }
+  // Debt/Assets ≤ 0.60
+  {
+    const d2a = K.d_to_a as number | null | undefined;
+    const rel = Number.isFinite(d2a as number) ? (d2a as number) > 0.60 : false;
+    const reason = (d2a == null) ? 'Missing inputs: total assets and liabilities.' : (rel ? `D/A ${fmt1(d2a,'ratio')} > 0.60` : `D/A ${fmt1(d2a,'ratio')} ≤ 0.60`);
+    push('BORROW_IMPROVE_DEBT_TO_ASSET_60PCT', 'Improve debt‑to‑asset ratio ≤ 0.60', 'borrow', ['Prioritise debt reduction', 'Avoid new large liabilities'], rel, reason);
+  }
+  // Liquid share of NW ≥ 15%
+  {
+    const lanw = K.lanw as number | null | undefined;
+    const rel = Number.isFinite(lanw as number) ? (lanw as number) < 0.15 : false;
+    const reason = (lanw == null) ? 'Missing inputs: assets and liquid savings.' : (rel ? `LANW ${fmt1(lanw)} < 15%` : `LANW ${fmt1(lanw)} ≥ 15%`);
+    push('SAVE_INCREASE_LIQUID_SHARE_15PCT', 'Lift liquid assets toward ≥ 15% of net worth', 'save', ['Hold part of new savings in cash/offset', 'Build buffer before investing further'], rel, reason);
+  }
+  // Investable share of NW ≥ 40%
+  {
+    const invnw = K.invnw as number | null | undefined;
+    const rel = Number.isFinite(invnw as number) ? (invnw as number) < 0.40 : false;
+    const reason = (invnw == null) ? 'Missing inputs: net worth and investable assets.' : (rel ? `INVNW ${fmt1(invnw)} < 40%` : `INVNW ${fmt1(invnw)} ≥ 40%`);
+    push('GROW_INCREASE_INVESTABLE_SHARE_40PCT', 'Increase investable share toward ≥ 40% of net worth', 'grow', ['Automate monthly investing', 'Rebalance annually to target mix'], rel, reason);
+  }
+  // Pension contributions ≥ 10%
+  {
+    const pc = K.pension_contrib_pct as number | null | undefined;
+    const rel = Number.isFinite(pc as number) ? (pc as number) < 0.10 : false;
+    const reason = (pc == null) ? 'Missing inputs: pension contribution % or gross income.' : (rel ? `Pension contrib ${fmt1(pc)} < 10%` : `Pension contrib ${fmt1(pc)} ≥ 10%`);
+    push('GROW_RAISE_PENSION_CONTRIB_10PCT', 'Raise pension contributions to ≥ 10% of gross', 'grow', ['Increase salary sacrifice by 1–2%', 'Capture full employer match'], rel, reason);
+  }
+  // Retirement readiness ≥ 0.60
+  {
+    const rrr = K.rrr as number | null | undefined;
+    const rel = Number.isFinite(rrr as number) ? (rrr as number) < 0.60 : false;
+    const reason = (rrr == null) ? 'Missing retirement inputs (age, target income, investables).' : (rel ? `RRR ${fmt1(rrr,'ratio')} < 0.60` : `RRR ${fmt1(rrr,'ratio')} ≥ 0.60`);
+    push('GROW_IMPROVE_RRR_60PCT', 'Improve retirement readiness toward 60%+', 'grow', ['Increase contribution rate by 1–2%', 'Review target age or income'], rel, reason);
+  }
+  // Life cover ≥ 5y (only relevant if dependants)
+  {
+    const gate = (gates as any)?.life_cover_ok as boolean | undefined;
+    const rel = gate === false;
+    const ycover = K.years_cover as number | null | undefined;
+    const reason = gate === undefined ? 'Need dependants, life cover, liquid savings, debts to assess.' : (rel ? `Life cover ${ycover != null ? `${fmt1(ycover,'ratio')} years` : 'insufficient'} < 5 years` : 'Coverage adequate (≥ 5 years).');
+    push('PROTECT_LIFE_COVER_GE_5Y', 'Lift life insurance to ≥ 5 years of needs', 'protect', ['Get a quick quote for term life', 'Set sum assured ≥ 5× annual dependant needs'], rel, reason);
+  }
+  // Income continuity ≥ 6 months
+  {
+    const gate = (gates as any)?.income_protection_ok as boolean | undefined;
+    const rel = gate === false;
+    const covered = K.months_covered as number | null | undefined;
+    const reason = gate === undefined ? 'Need sick pay months and/or IP benefit to assess.' : (rel ? `Continuity ${covered != null ? fmt1(covered,'months') : 'insufficient'} < 6mo` : 'Continuity adequate (≥ 6 months).');
+    push('PROTECT_INCOME_CONTINUITY_6M', 'Reach 6 months income continuity', 'protect', ['Check work sick pay policy', 'Price income protection to cover essentials for 6 months'], rel, reason);
+  }
+  // Current ratio ≥ 1 (hygiene)
+  {
+    const cr = K.current_ratio as number | null | undefined;
+    const rel = Number.isFinite(cr as number) ? (cr as number) < 1 : false;
+    const reason = (cr == null) ? 'Missing inputs: liquid assets and short‑term liabilities.' : (rel ? `Current ratio ${fmt1(cr,'ratio')} < 1` : `Current ratio ${fmt1(cr,'ratio')} ≥ 1`);
+    push('HYGIENE_CURRENT_RATIO_GE_1', 'Improve current ratio to ≥ 1', 'protect', ['Boost liquid savings', 'Reduce short‑term liabilities'], rel, reason);
+  }
+
+  // Map server-completed and dismissed state
   const uniqueTitles = new Set<string>();
-  const deduped = recItems.filter((it) => {
-    const t = it.title.toString().toLowerCase();
-    if (uniqueTitles.has(t)) return false;
-    uniqueTitles.add(t);
+  const deduped = catalogue.filter((it) => {
+    const key = (it.action_id || it.title).toString().toLowerCase();
+    if (uniqueTitles.has(key)) return false;
+    uniqueTitles.add(key);
     return true;
   });
-  const uncompleted = deduped.filter((it) => {
+  const isCompleted = (it: any) => {
+    if (it.action_id && completedIds.includes(it.action_id)) return true;
     const t = it.title.toString().toLowerCase();
-    return !completedTitles.includes(t) && !dismissedTitles.includes(t);
-  });
-  const completedFromRecs = deduped.filter((it) => {
+    return completedTitles.includes(t);
+  };
+  const isDismissed = (it: any) => {
+    if (it.action_id && dismissedIds.includes(it.action_id)) return true;
     const t = it.title.toString().toLowerCase();
-    return completedTitles.includes(t) && !dismissedTitles.includes(t);
+    return dismissedTitles.includes(t);
+  };
+  let uncompleted = deduped.filter((it) => !isCompleted(it) && !isDismissed(it));
+  uncompleted = uncompleted.sort((a, b) => {
+    const aRec = recIds.has(a.action_id || '');
+    const bRec = recIds.has(b.action_id || '');
+    if (aRec !== bRec) return aRec ? -1 : 1;
+    if ((a as any).relevant !== (b as any).relevant) return (a as any).relevant ? -1 : 1;
+    return a.title.localeCompare(b.title);
   });
+  const completedFromRecs = deduped.filter((it) => isCompleted(it) && !isDismissed(it));
   const completedExtra = completedItems.filter((it) => {
     const t = (it.title || '').toString().toLowerCase();
     return t && !deduped.some((ri) => ri.title.toString().toLowerCase() === t) && !dismissedTitles.includes(t);
   });
 
-  const markDone = async (title: string) => {
+  const markDone = async (title: string, action_id?: string) => {
     try {
-      await fetch('/api/actions/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId, title }) });
+      await fetch('/api/actions/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId, title, action_id }) });
       // Optimistically update
       setCompletedTitles((prev) => Array.from(new Set([...prev, title.toLowerCase()])));
+      if (action_id) setCompletedIds((prev) => Array.from(new Set([...prev, action_id])));
       setCompletedItems((prev) => [{ id: Math.random().toString(36).slice(2), title, completed_at: new Date().toISOString() }, ...prev]);
     } catch {}
   };
 
-  const dismiss = async (title: string) => {
+  const dismiss = async (title: string, action_id?: string) => {
     try {
-      await fetch('/api/actions/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId, title }) });
+      await fetch('/api/actions/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId, title, action_id }) });
       setDismissedTitles((prev) => Array.from(new Set([...prev, title.toLowerCase()])));
+      if (action_id) setDismissedIds((prev) => Array.from(new Set([...prev, action_id])));
     } catch {}
   };
 
   const Item = ({
-    title, why, how, unlocks, completed,
-  }: { title: string; why?: any; how?: any; unlocks?: any; completed?: boolean }) => (
-    <div className="border rounded-md p-2 bg-white">
+    action_id, title, how, relevant, reason, completed,
+  }: { action_id?: string; title: string; how: any; relevant: boolean; reason: string; completed?: boolean }) => (
+    <div className={`border rounded-md p-2 ${relevant ? 'bg-white' : 'bg-gray-50'}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-sm font-medium text-gray-800 truncate">
-            {title}
+          <div className={`text-sm font-medium truncate ${relevant ? 'text-gray-800' : 'text-gray-500'}`}>
+            {title} {recIds.has(action_id || '') ? (<span className="ml-2 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1 py-0.5 rounded">Recommended</span>) : null}
             {completed && <span className="ml-2 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">Completed</span>}
           </div>
-          {why && <div className="text-[11px] text-gray-600 mt-0.5">{String(why)}</div>}
+          {/* Temporary relevance reason for robustness testing */}
+          <div className={`text-[11px] mt-0.5 ${relevant ? 'text-gray-600' : 'text-gray-500'}`}>{reason}</div>
           {how && (
             <div className="text-[11px] text-gray-800 mt-1">
               {Array.isArray(how) ? (
                 <ul className="list-disc pl-4 space-y-0.5">{how.map((h: any, j: number) => <li key={j}>{String(h)}</li>)}</ul>
               ) : String(how)}
             </div>
-          )}
-          {unlocks && (
-            <div className="mt-1 text-[11px] text-gray-600">Unlocks: {String(unlocks)}</div>
           )}
         </div>
         <div className="shrink-0 flex flex-col gap-1">
@@ -718,13 +838,13 @@ function ActionPlan({ recs }: { recs: any }) {
               </button>
               <button
                 className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
-                onClick={() => markDone(title)}
+                onClick={() => markDone(title, action_id)}
               >
                 Mark done
               </button>
               <button
                 className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
-                onClick={() => dismiss(title)}
+                onClick={() => dismiss(title, action_id)}
                 title="Remove from plan"
               >
                 Remove
@@ -751,12 +871,12 @@ function ActionPlan({ recs }: { recs: any }) {
   }
 
   const removeAllCompleted = async () => {
-    const titles = [
-      ...completedFromRecs.map(r => r.title.toString()),
-      ...completedExtra.map(it => (it.title || '').toString()).filter(Boolean),
+    const pairs: Array<{title: string; action_id?: string}> = [
+      ...completedFromRecs.map(r => ({ title: r.title.toString(), action_id: r.action_id })),
+      ...completedExtra.map(it => ({ title: (it.title || '').toString() || 'Action', action_id: (it as any)?.action_id })),
     ];
-    for (const t of titles) {
-      await dismiss(t);
+    for (const p of pairs) {
+      await dismiss(p.title, p.action_id);
     }
   };
 
@@ -768,10 +888,10 @@ function ActionPlan({ recs }: { recs: any }) {
         </div>
       )}
       {uncompleted.map((r) => (
-        <Item key={`u-${r.title}`} title={r.title} why={r.why} how={r.how} unlocks={r.unlocks} />
+        <Item key={`u-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} />
       ))}
       {completedFromRecs.map((r) => (
-        <Item key={`c-${r.title}`} title={r.title} why={r.why} how={r.how} unlocks={r.unlocks} completed />
+        <Item key={`c-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} completed />
       ))}
       {completedExtra.length > 0 && (
         <div className="pt-1">

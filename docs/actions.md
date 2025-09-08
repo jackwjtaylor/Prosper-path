@@ -29,6 +29,5 @@ UI
 - Chat: If user says they completed an action, the agent calls completeAction({ title }) and then guides to the next step.
 
 Notes
-- Filtering: We filter by normalized title. When we add stable action IDs to recs, switch to id-based filtering.
+- Filtering: Now filters prefer stable `action_id` when present, with title as a fallback.
 - KPIs: Marking done doesn’t change KPIs; user still needs to update the underlying numbers for material changes.
-

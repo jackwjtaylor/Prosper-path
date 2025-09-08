@@ -6,6 +6,7 @@ import { assignLevelsV2 } from "@/app/lib/levelEngine";
 import { generateTwoBestActions } from "@/app/lib/recommendationsV2";
 import { z, parseJson } from "@/app/api/_lib/validation";
 import { rateLimit } from "@/app/api/_lib/rateLimit";
+import { assertHouseholdAccess } from "@/app/lib/auth";
 
 const BodySchema = z.object({
   householdId: z.string().uuid().optional(),
@@ -44,6 +45,47 @@ export async function POST(req: NextRequest) {
 
     const rl = await rateLimit(req, 'snapshot', { limit: 20, windowMs: 60_000, keyParts: [householdId] });
     if (!rl.ok) return rl.res;
+
+    // AuthZ: user must own this household (or be anonymous if unowned)
+    const authz = await assertHouseholdAccess(req, householdId);
+    if (!authz.ok) return NextResponse.json({ error: 'unauthorized' }, { status: authz.code });
+
+    // Enforce free-limit (metered paywall) consistent with other write routes
+    try {
+      const { data: hh } = await supabase
+        .from('households')
+        .select('subscription_status,current_period_end,email')
+        .eq('id', householdId)
+        .maybeSingle();
+      const sub = (hh as any)?.subscription_status || null;
+      const periodEnd = (hh as any)?.current_period_end ? Date.parse((hh as any).current_period_end) : 0;
+      const now = Date.now();
+      const premium = !!sub && ['active','trialing','past_due'].includes(sub) && (periodEnd === 0 || periodEnd > now);
+      if (!premium) {
+        const { count } = await supabase
+          .from('snapshots')
+          .select('id', { count: 'exact', head: true })
+          .eq('household_id', householdId);
+        const used = count ?? 0;
+        const freeLimit = Number(process.env.FREE_SNAPSHOT_LIMIT || 3);
+        if (used >= freeLimit) {
+          const isAuthed = !!authz.user;
+          let url: string | undefined;
+          if (isAuthed) {
+            try {
+              const origin = new URL(req.url).origin;
+              const r = await fetch(`${origin}/api/billing/create-checkout-session`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ householdId, email: (hh as any)?.email })
+              });
+              const j = await r.json();
+              url = j?.url;
+            } catch {}
+          }
+          return NextResponse.json({ error: 'free_limit_exceeded', upgrade_url: url, login_url: '/login' }, { status: 402 });
+        }
+      }
+    } catch {}
 
     // Ensure household row exists (FK on snapshots)
     try {

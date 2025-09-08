@@ -4,7 +4,7 @@ import supabase from "@/app/lib/supabaseServer";
 import type { Slots } from "@/app/lib/schema/slots";
 import { computeKpisV2 } from "@/app/lib/kpiEngine";
 import { assignLevelsV2 } from "@/app/lib/levelEngine";
-import { generateRecommendations } from "@/app/lib/prosperTools";
+import { generateTwoBestActions } from "@/app/lib/recommendationsV2";
 import { assertHouseholdAccess } from "@/app/lib/auth";
 import { z, parseJson } from "@/app/api/_lib/validation";
 import { rateLimit } from "@/app/api/_lib/rateLimit";
@@ -165,7 +165,7 @@ export async function POST(req: NextRequest) {
     // Compute & persist
     const { kpis, gates, normalized } = computeKpisV2(slots as Slots);
     const levels = assignLevelsV2(kpis, gates);
-    const recommendations = generateRecommendations(kpis as any, levels as any, {});
+    const recommendations = generateTwoBestActions(kpis as any, gates as any);
 
     const { data: snap, error: snapErr } = await supabase
       .from('snapshots')

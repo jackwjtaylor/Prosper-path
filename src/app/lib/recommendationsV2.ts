@@ -1,13 +1,21 @@
 import type { KpisV2, GatesV2 } from './kpiEngine';
 
-type Rec = { title: string; why?: string; how?: string[]; pillar?: string; score?: number };
+type Rec = { action_id: string; title: string; why?: string; how?: string[]; pillar?: string; score?: number };
 
-export function generateTwoBestActions(k: KpisV2, g: GatesV2): Array<{ title: string; why?: string; how?: string[]; pillar?: string }> {
+function code(id: string) {
+  return id.toUpperCase().replace(/[^A-Z0-9_]+/g, '_');
+}
+
+/**
+ * Generate the two best actions with stable action_id codes for tracking.
+ */
+export function generateTwoBestActions(k: KpisV2, g: GatesV2): Array<{ action_id: string; title: string; why?: string; how?: string[]; pillar?: string }> {
   const actions: Rec[] = [];
 
   // Prioritize gates first
   if (g.life_cover_ok === false) {
     actions.push({
+      action_id: code('protect_life_cover_ge_5y'),
       pillar: 'protect',
       title: 'Lift life insurance to ≥ 5 years of needs',
       why: 'Dependants rely on your income; coverage is below 5 years.',
@@ -17,6 +25,7 @@ export function generateTwoBestActions(k: KpisV2, g: GatesV2): Array<{ title: st
   }
   if (g.income_protection_ok === false) {
     actions.push({
+      action_id: code('protect_income_continuity_6m'),
       pillar: 'protect',
       title: 'Reach 6 months income continuity',
       why: 'Sick pay + income protection is under 6 months.',
@@ -28,6 +37,7 @@ export function generateTwoBestActions(k: KpisV2, g: GatesV2): Array<{ title: st
   // Then core ratios with biggest impact
   if ((k.ef_months ?? 0) < 3) {
     actions.push({
+      action_id: code('save_emergency_fund_3m'),
       pillar: 'save',
       title: 'Build emergency fund to 3 months',
       why: `Current buffer ≈ ${(k.ef_months ?? 0).toFixed(1)} months`,
@@ -38,6 +48,7 @@ export function generateTwoBestActions(k: KpisV2, g: GatesV2): Array<{ title: st
 
   if ((k.nmdsr ?? 1) > 0.1) {
     actions.push({
+      action_id: code('borrow_nmdsr_le_10pct'),
       pillar: 'borrow',
       title: 'Reduce non-mortgage debt servicing ≤ 10%',
       why: `NMDSR ≈ ${Math.round((k.nmdsr ?? 0)*100)}%`,
@@ -48,6 +59,7 @@ export function generateTwoBestActions(k: KpisV2, g: GatesV2): Array<{ title: st
 
   if ((k.sr ?? 0) < 0.2) {
     actions.push({
+      action_id: code('spend_lift_savings_rate_20pct'),
       pillar: 'spend',
       title: 'Lift savings rate toward 20%',
       why: `Savings rate ≈ ${Math.round((k.sr ?? 0)*100)}%`,
@@ -59,6 +71,7 @@ export function generateTwoBestActions(k: KpisV2, g: GatesV2): Array<{ title: st
   // Housing Ratio (target ≤ 0.40)
   if ((k.hr ?? 0) > 0.40) {
     actions.push({
+      action_id: code('spend_reduce_housing_ratio_40pct'),
       pillar: 'spend',
       title: 'Reduce housing burden toward ≤ 40% of gross',
       why: `Housing ratio ≈ ${Math.round(((k.hr ?? 0) * 100))}%`,
@@ -70,6 +83,7 @@ export function generateTwoBestActions(k: KpisV2, g: GatesV2): Array<{ title: st
   // DSR total (target ≤ 20%)
   if ((k.dsr_total ?? 0) > 0.20) {
     actions.push({
+      action_id: code('borrow_reduce_dsr_total_20pct'),
       pillar: 'borrow',
       title: 'Lower total debt servicing toward ≤ 20% of income',
       why: `DSR ≈ ${Math.round(((k.dsr_total ?? 0) * 100))}%`,
@@ -81,6 +95,7 @@ export function generateTwoBestActions(k: KpisV2, g: GatesV2): Array<{ title: st
   // D/A (target ≤ 0.60)
   if ((k.d_to_a ?? 0) > 0.60) {
     actions.push({
+      action_id: code('borrow_improve_debt_to_asset_60pct'),
       pillar: 'borrow',
       title: 'Improve debt-to-asset ratio ≤ 0.60',
       why: `Debt-to-asset ≈ ${((k.d_to_a ?? 0)).toFixed(2)}`,
@@ -92,6 +107,7 @@ export function generateTwoBestActions(k: KpisV2, g: GatesV2): Array<{ title: st
   // LANW (target ≥ 15%)
   if ((k.lanw ?? 1) < 0.15) {
     actions.push({
+      action_id: code('save_increase_liquid_share_15pct'),
       pillar: 'save',
       title: 'Lift liquid assets toward ≥ 15% of net worth',
       why: `LANW ≈ ${Math.round(((k.lanw ?? 0) * 100))}%`,
@@ -103,6 +119,7 @@ export function generateTwoBestActions(k: KpisV2, g: GatesV2): Array<{ title: st
   // INVNW (target ≥ 40%)
   if ((k.invnw ?? 1) < 0.40) {
     actions.push({
+      action_id: code('grow_increase_investable_share_40pct'),
       pillar: 'grow',
       title: 'Increase investable share toward ≥ 40% of net worth',
       why: `INVNW ≈ ${Math.round(((k.invnw ?? 0) * 100))}%`,
@@ -114,6 +131,7 @@ export function generateTwoBestActions(k: KpisV2, g: GatesV2): Array<{ title: st
   // Pension contribution % (target ≥ 10%)
   if ((k.pension_contrib_pct ?? 0) < 0.10) {
     actions.push({
+      action_id: code('grow_raise_pension_contrib_10pct'),
       pillar: 'grow',
       title: 'Raise pension contributions to ≥ 10% of gross',
       why: `Current pension contrib ≈ ${Math.round(((k.pension_contrib_pct ?? 0) * 100))}%`,
@@ -125,6 +143,7 @@ export function generateTwoBestActions(k: KpisV2, g: GatesV2): Array<{ title: st
   // Retirement readiness RRR (target ≥ 0.60 for secure path)
   if ((k.rrr ?? 1) < 0.60 && (k.rrr ?? -1) >= 0) {
     actions.push({
+      action_id: code('grow_improve_rrr_60pct'),
       pillar: 'grow',
       title: 'Improve retirement readiness toward 60%+',
       why: `RRR ≈ ${((k.rrr ?? 0)).toFixed(2)}`,
