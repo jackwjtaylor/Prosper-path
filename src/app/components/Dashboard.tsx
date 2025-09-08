@@ -139,7 +139,7 @@ export default function Dashboard() {
       const id = await ensureHouseholdId();
       setHouseholdId(id);
       // Attach auth token if available
-      let headers: any = {};
+      const headers: any = {};
       try {
         const supa = getSupabaseClient();
         if (supa) {
@@ -189,7 +189,7 @@ export default function Dashboard() {
     if (!supa || !householdId) return;
     const channel = supa
       .channel(`snapshots:${householdId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'snapshots', filter: `household_id=eq.${householdId}` }, (_payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'snapshots', filter: `household_id=eq.${householdId}` }, () => {
         setShowSavedToast(true);
         setTimeout(() => setShowSavedToast(false), 3500);
         load();

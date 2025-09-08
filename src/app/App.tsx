@@ -38,7 +38,7 @@ function App() {
   const [selectedAgentConfigSet, setSelectedAgentConfigSet] = useState<RealtimeAgent[] | null>(null);
 
   const [householdId, setHouseholdId] = useState<string>("");
-  const [isAuthed, setIsAuthed] = useState<boolean>(false);
+  // Track auth state locally only where needed in ProfileMenu
   const [isReturningUser, setIsReturningUser] = useState<boolean>(false);
   const [entitlements, setEntitlements] = useState<{ plan: 'free'|'premium'; subscription_status?: string; current_period_end?: string } | null>(null);
   const [householdInfo, setHouseholdInfo] = useState<{ email?: string; full_name?: string } | null>(null);
@@ -51,7 +51,6 @@ function App() {
       const sessRes = await supa.auth.getSession();
       const data = 'data' in sessRes ? sessRes.data : undefined;
       const authed = !!data?.session;
-      setIsAuthed(authed);
       if (authed) {
         try {
           const token = data?.session?.access_token;
@@ -61,7 +60,6 @@ function App() {
     })();
     const { data: sub } = supa.auth.onAuthStateChange(async (_event, session) => {
       const authed = !!session;
-      setIsAuthed(authed);
       if (authed) {
         try { await fetch('/api/household/ensure', { method: 'POST', headers: { Authorization: `Bearer ${session!.access_token}` } }); } catch {}
       }
@@ -72,7 +70,7 @@ function App() {
     (async () => {
       if (!householdId) return;
       try {
-        let headers: any = {};
+        const headers: any = {};
         try {
           const supa = getSupabaseClient();
           if (supa) {
