@@ -423,12 +423,12 @@ function App() {
         </nav>
         <div className="flex items-center gap-2">
           <ThemeToggle />
+          <ProfileMenu
+            householdId={householdId}
+            entitlements={entitlements}
+            household={householdInfo}
+          />
         </div>
-        <ProfileMenu
-          householdId={householdId}
-          entitlements={entitlements}
-          household={householdInfo}
-        />
       </div>
 
       {/* BODY: centered 2-col grid so the left pane sizes cleanly */}
