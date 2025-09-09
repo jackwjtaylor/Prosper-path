@@ -283,9 +283,8 @@ export default function Dashboard() {
           Premium unlocked — thanks for supporting Prosper! Your full history and premium features are enabled.
         </div>
       )}
-      <header className="flex items-start justify-between mb-4 gap-3">
-        <div />
-        <div className="flex items-center gap-2 gap-y-1 flex-wrap justify-end">
+      <header className="flex items-center justify-end mb-4 gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {/* Free uses left nudge */}
           {data?.usage && entitlements?.plan !== 'premium' && (
             <div className={`text-xs shrink-0 ${Math.max(0, Number((data?.usage as any)?.remaining ?? 0)) <= 3 ? 'text-red-600' : 'text-gray-600'}`}>
