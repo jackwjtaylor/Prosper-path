@@ -60,6 +60,9 @@ function App() {
   // Track auth state locally only where needed in ProfileMenu
   const [isReturningUser, setIsReturningUser] = useState<boolean>(false);
   const [entitlements, setEntitlements] = useState<{ plan: 'free'|'premium'; subscription_status?: string; current_period_end?: string } | null>(null);
+  const [usage, setUsage] = useState<{ free_limit?: number; used?: number; remaining?: number } | null>(null);
+  const [isUserDataOpen, setIsUserDataOpen] = useState<boolean>(false);
+  const [missingRequiredCount, setMissingRequiredCount] = useState<number>(0);
   const [householdInfo, setHouseholdInfo] = useState<{ email?: string; full_name?: string } | null>(null);
   useEffect(() => { ensureHouseholdId().then(setHouseholdId); }, []);
   // Track auth status and auto-link household when signed in
@@ -104,10 +107,23 @@ function App() {
         const hasInputs = inputs && typeof inputs === 'object' && Object.keys(inputs).length > 0;
         setIsReturningUser(!!hasInputs);
         setEntitlements(json?.entitlements || null);
+        setUsage(json?.usage || null);
         setHouseholdInfo(json?.household || null);
       } catch {}
     })();
   }, [householdId]);
+
+  // Receive dashboard's data-view and missing-required indicators for header UI
+  useEffect(() => {
+    const onState = (e: any) => {
+      const open = !!(e?.detail?.open);
+      const missing = Number(e?.detail?.missingRequired ?? 0);
+      setIsUserDataOpen(open);
+      setMissingRequiredCount(Number.isFinite(missing) ? missing : 0);
+    };
+    window.addEventListener('pp:user_data_state', onState as any);
+    return () => window.removeEventListener('pp:user_data_state', onState as any);
+  }, []);
 
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const [handoffTriggered, setHandoffTriggered] = useState<boolean>(false);
@@ -417,11 +433,76 @@ function App() {
           <span>Prosper AI <span className="text-gray-400">your personal wealth coach</span></span>
         </Link>
         <nav className="hidden md:flex items-center gap-6 text-sm">
-          <Link href="/home" className="text-gray-700 hover:text-gray-900">Home</Link>
-          <Link href="/pricing" className="text-gray-700 hover:text-gray-900">Pricing</Link>
-          <Link href="/feedback" className="text-gray-700 hover:text-gray-900">Feedback</Link>
+          <Link
+            href="/feedback"
+            className="h-8 px-3 inline-flex items-center gap-2 rounded-lg border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 text-xs shadow-sm"
+          >
+            Give Feedback
+          </Link>
         </nav>
         <div className="flex items-center gap-2">
+          {/* Free uses chip (non-premium only) */}
+          {entitlements?.plan !== 'premium' && typeof usage?.remaining === 'number' && (
+            <div
+              className={`text-xs shrink-0 ${Math.max(0, Number(usage?.remaining ?? 0)) <= 3 ? 'text-red-600' : 'text-gray-600'}`}
+              title="Free uses remaining"
+            >
+              Free uses left: <b>{Math.max(0, Number(usage?.remaining ?? 0))}</b>
+            </div>
+          )}
+
+          {/* My Data / Dashboard toggle (same size as Upgrade) */}
+          <button
+            type="button"
+            className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border border-border bg-card hover:opacity-90 text-xs shadow-sm shrink-0"
+            onClick={() => { try { window.dispatchEvent(new CustomEvent('pp:open_user_data')); } catch {} }}
+            title="View and edit the data used for your calculations"
+          >
+            {isUserDataOpen ? 'Dashboard' : 'My Data'}
+            {missingRequiredCount > 0 && (
+              <span
+                className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded-full bg-red-600 text-white text-[10px]"
+                title={`${missingRequiredCount} required item${missingRequiredCount === 1 ? '' : 's'} missing`}
+                aria-label={`Missing required: ${missingRequiredCount}`}
+              >
+                !
+              </span>
+            )}
+          </button>
+
+          {/* Manage/Upgrade plan */}
+          {householdId && entitlements?.plan === 'premium' && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const res = await fetch('/api/billing/create-portal-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId }) });
+                  const j = await res.json();
+                  if (j?.url) window.location.href = j.url;
+                } catch {}
+              }}
+              className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border border-border bg-card hover:opacity-90 text-xs shadow-sm"
+            >
+              Manage plan
+            </button>
+          )}
+          {householdId && entitlements?.plan !== 'premium' && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const email = householdInfo?.email;
+                  const res = await fetch('/api/billing/create-checkout-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId, email }) });
+                  const j = await res.json();
+                  if (j?.url) window.location.href = j.url;
+                } catch {}
+              }}
+              className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border bg-gray-900 text-white hover:bg-gray-800 text-xs shadow-sm"
+            >
+              Upgrade
+            </button>
+          )}
+
           <ThemeToggle />
           <ProfileMenu
             householdId={householdId}

@@ -169,7 +169,7 @@ export default function Dashboard() {
       setTimeout(() => setShowSavedToast(false), 3500);
     };
     const onBilling = () => { setShowPremiumBanner(true); setTimeout(() => setShowPremiumBanner(false), 8000); };
-    const onOpenUserData = () => setShowUserData(true);
+    const onOpenUserData = () => setShowUserData(v => !v);
     window.addEventListener('pp:snapshot_saved', onSaved as any);
     window.addEventListener('pp:billing_confirmed', onBilling as any);
     window.addEventListener('pp:open_user_data', onOpenUserData as any);
@@ -275,6 +275,13 @@ export default function Dashboard() {
   const debtsOverrideUsed = (slotsAny?.debts_total?.value != null) && !componentsLiabsPresent;
   // const hasNwOverrides = assetsOverrideUsed || debtsOverrideUsed; // presently unused
 
+  // Broadcast data view + missing-required status to the header
+  React.useEffect(() => {
+    try {
+      window.dispatchEvent(new CustomEvent('pp:user_data_state', { detail: { open: showUserData, missingRequired } }));
+    } catch {}
+  }, [showUserData, missingRequired]);
+
   return (
     <>
     <div className="w-full h-full">
@@ -283,62 +290,7 @@ export default function Dashboard() {
           Premium unlocked — thanks for supporting Prosper! Your full history and premium features are enabled.
         </div>
       )}
-      <header className="flex items-center justify-end mb-4 gap-2">
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Free uses left nudge */}
-          {data?.usage && entitlements?.plan !== 'premium' && (
-            <div className={`text-xs shrink-0 ${Math.max(0, Number((data?.usage as any)?.remaining ?? 0)) <= 3 ? 'text-red-600' : 'text-gray-600'}`}>
-              Free uses left: <b>{Math.max(0, Number((data?.usage as any)?.remaining ?? 0))}</b>
-            </div>
-          )}
-          {/* Missing data indicator (always visible when applicable) */}
-          {missingRequired > 0 && (
-            <div className="text-xs shrink-0 text-red-600 inline-flex items-center gap-1" title="Some required items are missing">
-              <span className="inline-flex items-center justify-center h-4 min-w-[1rem] px-1 rounded-full bg-red-500 text-white">
-                {missingRequired}
-              </span>
-              <span>Missing items</span>
-            </div>
-          )}
-          <button
-            onClick={() => setShowUserData(v => !v)}
-            className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border border-border bg-card hover:opacity-90 text-xs shadow-sm shrink-0"
-            aria-pressed={showUserData}
-            title="Review the data used for your calculations"
-          >
-            {showUserData ? 'Hide data' : 'Review data'}
-          </button>
-          {householdId && entitlements?.plan === 'premium' && (
-            <button
-              onClick={async () => {
-                try {
-                  const res = await fetch('/api/billing/create-portal-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId }) });
-                  const j = await res.json();
-                  if (j?.url) window.location.href = j.url;
-                } catch {}
-              }}
-              className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border border-border bg-card hover:opacity-90 text-xs shadow-sm"
-            >
-              Manage plan
-            </button>
-          )}
-          {householdId && entitlements?.plan !== 'premium' && (
-            <button
-              onClick={async () => {
-                try {
-                  const email = (latest as any)?.inputs?.slots?.email?.value || (latest as any)?.inputs?.email || data?.household?.email;
-                  const res = await fetch('/api/billing/create-checkout-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId, email }) });
-                  const j = await res.json();
-                  if (j?.url) window.location.href = j.url;
-                } catch {}
-              }}
-              className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border bg-gray-900 text-white hover:bg-gray-800 text-xs shadow-sm"
-            >
-              Upgrade
-            </button>
-          )}
-        </div>
-      </header>
+      {/* Inline dashboard header removed; indicators now live in the top header */}
 
       {error && (
         <div role="alert" className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
