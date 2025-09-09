@@ -13,7 +13,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`antialiased`}>{children}</body>
+      <body className={`antialiased`}>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(() => { try { var t = localStorage.getItem('theme'); if (!t) { t = 'dark'; localStorage.setItem('theme', t); } document.documentElement.setAttribute('data-theme', t); } catch(e){} })();`,
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

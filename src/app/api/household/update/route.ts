@@ -14,8 +14,9 @@ export const POST = withHouseholdAccess<z.infer<typeof BodySchema>>(
   async ({ data, householdId }) => {
     // Ensure row exists; upsert only provided fields to avoid clobbering
     const updates: any = { id: householdId };
-    if (typeof data.email === 'string' && data.email.trim()) updates.email = data.email.trim();
-    if (typeof data.full_name === 'string' && data.full_name.trim()) updates.full_name = data.full_name.trim();
+    const body = (data ?? {}) as Partial<z.infer<typeof BodySchema>>;
+    if (typeof body.email === 'string' && body.email.trim()) updates.email = body.email.trim();
+    if (typeof body.full_name === 'string' && body.full_name.trim()) updates.full_name = body.full_name.trim();
 
     const { data: upserted, error } = await supabase
       .from('households')

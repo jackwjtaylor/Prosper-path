@@ -24,7 +24,8 @@ export const POST = withHouseholdAccess<z.infer<typeof BodySchema>>(
   BodySchema,
   'json',
   async ({ req, data, householdId, user }) => {
-    const effectiveId = (data.householdId || data.household_id || householdId) as string;
+    const body = (data ?? {}) as z.infer<typeof BodySchema>;
+    const effectiveId = (body.householdId || body.household_id || householdId) as string;
     // Enforce free-limit via shared service
     try {
       const origin = new URL(req.url).origin;
@@ -49,7 +50,7 @@ export const POST = withHouseholdAccess<z.infer<typeof BodySchema>>(
       return NextResponse.json({ error: 'household_insert_failed', detail: e?.message || 'failed' }, { status: 500 });
     }
 
-    const inputs = (data.inputs || {}) as Record<string, any>;
+    const inputs = (body.inputs || {}) as Record<string, any>;
     const snapshot = await computeAndPersist(effectiveId, inputs);
     return NextResponse.json({ ok: true, id: snapshot.id, created_at: snapshot.created_at });
   },

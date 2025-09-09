@@ -29,7 +29,7 @@ export default function LeftPaneControls({
 
   return (
     <div className="sticky top-0 z-10">
-      <div className="backdrop-blur bg-white/80 border rounded-xl px-3 py-2 shadow-sm">
+      <div className="backdrop-blur bg-card border border-border rounded-xl px-3 py-2 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={onToggleConnection}
@@ -67,7 +67,7 @@ export default function LeftPaneControls({
         </button>
 
         {/* Mic state chip */}
-        <div className="inline-flex items-center gap-2 text-xs select-none px-2 py-1 rounded-full border bg-white">
+        <div className="inline-flex items-center gap-2 text-xs select-none px-2 py-1 rounded-full border bg-card">
           <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${isMicMuted ? 'bg-red-600' : 'bg-emerald-500'}`}>
             {!isMicMuted && (
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-50"></span>

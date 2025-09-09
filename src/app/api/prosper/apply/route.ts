@@ -115,8 +115,9 @@ export const POST = withHouseholdAccess<z.infer<typeof BodySchema>>(
     const existingSlots = (existingInputs?.slots as Slots | undefined) || ({} as any);
 
     // Merge incoming
-    const incomingInputs = (data.inputs && typeof data.inputs === 'object') ? data.inputs : {};
-    const rawSlots = (data.slots && typeof data.slots === 'object') ? (data.slots as Record<string, SlotDelta>) : {};
+    const body = (data ?? {}) as Partial<z.infer<typeof BodySchema>>;
+    const incomingInputs = (body.inputs && typeof body.inputs === 'object') ? body.inputs : {};
+    const rawSlots = (body.slots && typeof body.slots === 'object') ? (body.slots as Record<string, SlotDelta>) : {};
     const incomingSlotsRaw: Record<string, SlotDelta> = {};
     for (const [key, v] of Object.entries(rawSlots)) {
       incomingSlotsRaw[canonicalSlotKey(key)] = v as SlotDelta;

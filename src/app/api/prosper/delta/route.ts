@@ -22,7 +22,8 @@ export const POST = withHouseholdAccess<z.infer<typeof DeltaBodySchema>>(
       if (!check.ok) return NextResponse.json({ error: 'free_limit_exceeded', upgrade_url: (check as any).upgrade_url, login_url: (check as any).login_url }, { status: 402 });
     } catch {}
 
-    const snapshot = await updateSnapshotDeltas(householdId!, data.deltas || {}, (data.confidences || {}) as any);
+    const body = (data ?? {}) as z.infer<typeof DeltaBodySchema>;
+    const snapshot = await updateSnapshotDeltas(householdId!, body.deltas || {}, (body.confidences || {}) as any);
     return NextResponse.json({ ok: true, snapshot });
   },
   { rateLimit: { bucket: 'snapshot', limit: 20, windowMs: 60_000, addHouseholdToKey: true }, sameOrigin: true }

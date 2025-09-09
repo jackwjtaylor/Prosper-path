@@ -19,12 +19,14 @@ export default function ChatPanel({ userText, setUserText, onSendMessage, onTogg
   const isConnecting = sessionStatus === "CONNECTING";
   const isMicMuted = useAppStore(s => s.isMicMuted);
   const setIsMicMuted = useAppStore(s => s.setIsMicMuted);
+  const isTranscriptVisible = useAppStore(s => s.isTranscriptVisible);
+  const setIsTranscriptVisible = useAppStore(s => s.setIsTranscriptVisible);
 
   return (
     <div className="min-w-0 flex flex-col gap-3 h-full min-h-0">
       {/* Integrated header: connection + mic status */}
       <div className="sticky top-0 z-10">
-        <div className="backdrop-blur bg-white/80 border rounded-xl px-3 py-2 shadow-sm">
+        <div className="backdrop-blur bg-card border border-border rounded-xl px-3 py-2 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={onToggleConnection}
@@ -69,7 +71,15 @@ export default function ChatPanel({ userText, setUserText, onSendMessage, onTogg
               <span>{isMicMuted ? 'Muted' : 'Listening'}</span>
             </div>
 
-            <div className="ml-auto" />
+            <button
+              type="button"
+              onClick={() => setIsTranscriptVisible(!isTranscriptVisible)}
+              className="ml-auto h-9 px-3 rounded-lg text-sm font-medium border shadow-sm bg-card"
+              aria-pressed={isTranscriptVisible}
+              title={isTranscriptVisible ? 'Hide transcript' : 'Show transcript'}
+            >
+              {isTranscriptVisible ? 'Hide transcript' : 'Show transcript'}
+            </button>
           </div>
         </div>
       </div>
@@ -84,4 +94,3 @@ export default function ChatPanel({ userText, setUserText, onSendMessage, onTogg
     </div>
   );
 }
-

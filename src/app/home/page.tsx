@@ -4,7 +4,7 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-white via-gray-50 to-white text-gray-900">
       {/* Header */}
-      <header className="sticky top-0 z-40 backdrop-blur bg-white/70 border-b">
+      <header className="sticky top-0 z-40 backdrop-blur bg-card border-b border-border">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link href="/home" className="flex items-center gap-2 text-sm font-semibold">
             <img src="/2D76K394.eps.svg" alt="Prosper Logo" className="h-6 w-6" />
@@ -61,27 +61,27 @@ export default function HomePage() {
             </div>
           </div>
           <div className="relative">
-            <div className="rounded-2xl border shadow-sm bg-white p-4">
+            <div className="rounded-2xl border border-border shadow-sm bg-card p-4">
               <div className="text-sm text-gray-600">Preview</div>
               <div className="mt-3 grid grid-cols-2 gap-3">
-                <div className="rounded-lg border p-3 bg-white">
+                <div className="rounded-lg border border-border p-3 bg-card">
                   <div className="text-xs text-gray-500">Level</div>
                   <div className="text-2xl font-semibold">L5</div>
                   <div className="text-xs text-gray-600">Building Resilience</div>
                 </div>
-                <div className="rounded-lg border p-3 bg-white">
+                <div className="rounded-lg border border-border p-3 bg-card">
                   <div className="text-xs text-gray-500">Urgent KPI</div>
                   <div className="h-1.5 rounded bg-gray-200 mt-2">
                     <div className="h-1.5 w-1/2 rounded bg-emerald-500" />
                   </div>
                   <div className="text-xs text-gray-600 mt-1">Emergency fund → 3 months</div>
                 </div>
-                <div className="rounded-lg border p-3 bg-white">
+                <div className="rounded-lg border border-border p-3 bg-card">
                   <div className="text-xs text-gray-500">Next action</div>
                   <div className="text-sm mt-1">Open a high‑interest savings space</div>
                   <div className="text-[11px] text-gray-600">Why: lift buffer quickly</div>
                 </div>
-                <div className="rounded-lg border p-3 bg-white">
+                <div className="rounded-lg border border-border p-3 bg-card">
                   <div className="text-xs text-gray-500">Net worth</div>
                   <div className="text-xl font-semibold mt-1">$182,400</div>
                   <div className="text-[11px] text-emerald-700">▲ +$1,200 (0.7%)</div>
@@ -96,15 +96,15 @@ export default function HomePage() {
       <section id="how" className="max-w-7xl mx-auto px-4 py-12">
         <h2 className="text-2xl md:text-3xl font-semibold text-center">How it works</h2>
         <div className="mt-6 grid md:grid-cols-3 gap-6">
-          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <div className="text-sm font-medium">1 — Start a friendly chat</div>
             <div className="text-sm text-gray-700 mt-1">Answer a few short questions. Ranges are fine.</div>
           </div>
-          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <div className="text-sm font-medium">2 — See your status</div>
             <div className="text-sm text-gray-700 mt-1">Get your level and KPIs, explained in everyday language.</div>
           </div>
-          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <div className="text-sm font-medium">3 — Take action</div>
             <div className="text-sm text-gray-700 mt-1">2 best actions for momentum, plus gentle nudges.</div>
           </div>
@@ -136,7 +136,7 @@ export default function HomePage() {
       {/* FAQ */}
       <section id="faq" className="max-w-3xl mx-auto px-4 py-12">
         <h2 className="text-2xl md:text-3xl font-semibold text-center">FAQ</h2>
-        <div className="mt-6 divide-y border rounded-2xl bg-white">
+        <div className="mt-6 divide-y border border-border rounded-2xl bg-card">
           <div className="p-5">
             <div className="text-sm font-medium">Is this financial advice?</div>
             <div className="text-sm text-gray-700 mt-1">Prosper provides general educational information and planning tools. It doesn’t replace a licensed adviser. Consider your personal circumstances and seek professional advice when needed.</div>
@@ -157,7 +157,7 @@ export default function HomePage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t">
+      <footer className="border-t border-border">
         <div className="max-w-7xl mx-auto px-4 py-8 text-sm text-gray-600">
           <div className="flex items-center justify-between">
             <div>© {new Date().getFullYear()} Prosper</div>

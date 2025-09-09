@@ -7,6 +7,8 @@ import { normaliseCurrency } from "@/app/lib/validate";
 import { normaliseSlots } from "@/app/lib/normalise";
 import BenchmarksCard from "@/app/components/BenchmarksCard";
 import LevelPill from "@/app/components/ui/LevelPill";
+import ActionCard from "@/app/components/ui/ActionCard";
+import Sparkline from "@/app/components/ui/Sparkline";
 
 /** ===== Types expected from /api/prosper/dashboard ===== */
 export type SeriesPoint = { ts: string; value: number };
@@ -80,47 +82,7 @@ const LEVEL_DESCRIPTIONS = [
   'Beyond financial independence with room for flexibility and giving.',
 ];
 
-/** Minimal sparkline (no deps) */
-function Sparkline({ points }: { points: SeriesPoint[] }) {
-  const w = 600; // wider internal coordinate space for better scaling
-  const h = 120; // taller internal height
-  const { d, areaD } = React.useMemo(() => {
-    if (!points || points.length === 0) return { d: "", areaD: "" };
-    const vals = points.map((p) => Number(p.value || 0));
-    const min = Math.min(...vals);
-    const max = Math.max(...vals);
-    const norm = (v: number) => (max === min ? 0.5 : (v - min) / (max - min));
-    const step = vals.length > 1 ? w / (vals.length - 1) : w;
-    const coords = vals.map((v, i) => [i * step, h - norm(v) * h] as const);
-    const path = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x},${y}`).join(" ");
-    const areaPath = `${path} L ${w},${h} L 0,${h} Z`;
-    return { d: path, areaD: areaPath };
-  }, [points]);
-
-  if (!d) {
-    return (
-      <div className="h-20 w-full bg-white rounded-md border flex items-center justify-center text-xs text-gray-500">
-        <div className="inline-flex items-center gap-2">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="#9CA3AF" /></svg>
-          No data
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-28 md:h-36" role="img" aria-label="Net worth trend">
-      <defs>
-        <linearGradient id="slope" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="currentColor" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaD} fill="url(#slope)" />
-      <path d={d} fill="none" stroke="currentColor" strokeWidth="2" />
-    </svg>
-  );
-}
+/** Sparkline now provided by ui/Sparkline */
 
 /** ===== Dashboard ===== */
 export default function Dashboard() {
@@ -341,7 +303,7 @@ export default function Dashboard() {
           )}
           <button
             onClick={() => setShowUserData(v => !v)}
-            className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border bg-white hover:bg-gray-50 text-xs shadow-sm shrink-0"
+            className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border border-border bg-card hover:opacity-90 text-xs shadow-sm shrink-0"
             aria-pressed={showUserData}
             title="Review the data used for your calculations"
           >
@@ -356,7 +318,7 @@ export default function Dashboard() {
                   if (j?.url) window.location.href = j.url;
                 } catch {}
               }}
-              className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border bg-white hover:bg-gray-50 text-xs shadow-sm"
+              className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border border-border bg-card hover:opacity-90 text-xs shadow-sm"
             >
               Manage plan
             </button>
@@ -387,11 +349,11 @@ export default function Dashboard() {
 
       {loading ? (
         <div aria-busy="true" aria-live="polite" className="grid grid-cols-1 xl:grid-cols-5 gap-4 animate-pulse">
-          <div className="xl:col-span-5 bg-white border rounded-xl shadow-sm h-36" />
-          <div className="xl:col-span-3 bg-white border rounded-xl shadow-sm h-64" />
-          <div className="xl:col-span-2 bg-white border rounded-xl shadow-sm h-64" />
-          <div className="xl:col-span-5 bg-white border rounded-xl shadow-sm h-28" />
-          <div className="xl:col-span-5 bg-white border rounded-xl shadow-sm h-72" />
+          <div className="xl:col-span-5 bg-card border border-border rounded-xl shadow-sm h-36" />
+          <div className="xl:col-span-3 bg-card border border-border rounded-xl shadow-sm h-64" />
+          <div className="xl:col-span-2 bg-card border border-border rounded-xl shadow-sm h-64" />
+          <div className="xl:col-span-5 bg-card border border-border rounded-xl shadow-sm h-28" />
+          <div className="xl:col-span-5 bg-card border border-border rounded-xl shadow-sm h-72" />
         </div>
       ) : (
         showUserData ? (
@@ -572,18 +534,18 @@ function V2KpiBar({
   const targetText = format === "pct" ? fmtPct(target) : format === "months" ? `${target} mo` : String(target);
 
   return (
-    <div className="border rounded-lg p-3 bg-white" title={tooltip || undefined}>
-      <div className="text-xs text-gray-600">{label}</div>
+    <div className="border border-border rounded-lg p-3 bg-card" title={tooltip || undefined}>
+      <div className="text-xs text-muted">{label}</div>
       <div className="flex items-baseline justify-between mt-0.5">
-        <div className="text-lg font-semibold">{fmt(raw)}</div>
-        <div className="text-[11px] text-gray-500">{subtitle ?? (dir === "higher" ? `Target ≥ ${targetText}` : `Target ≤ ${targetText}`)}</div>
+        <div className="text-lg font-semibold text-foreground">{fmt(raw)}</div>
+        <div className="text-[11px] text-muted">{subtitle ?? (dir === "higher" ? `Target ≥ ${targetText}` : `Target ≤ ${targetText}`)}</div>
       </div>
       <div className="mt-2 h-1.5 w-full rounded bg-gray-200">
         <div className={`h-1.5 rounded ${barColor}`} style={{ width: `${Math.round(progress * 100)}%` }} />
       </div>
       <div className="mt-2 text-[11px]">
         <button
-          className="underline text-gray-600 hover:text-gray-800"
+          className="underline text-muted hover:text-foreground"
           onClick={() => {
             const explain = `Explain my ${label.toLowerCase()}: current is ${fmt(raw)} vs target ${targetText}. Why this matters and 2 ways to improve, please.`;
             try { window.dispatchEvent(new CustomEvent('pp:open_chat', { detail: { text: explain } })); } catch {}
@@ -858,6 +820,24 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
     </div>
   );
 
+  // New ActionItem using ActionCard UI
+  const ActionItem = ({ action_id, title, how, relevant, reason, completed }: { action_id?: string; title: string; how: any; relevant: boolean; reason: string; completed?: boolean }) => (
+    <ActionCard
+      title={title}
+      why={reason}
+      steps={Array.isArray(how) ? how.map((h: any) => String(h)) : (typeof how === 'string' ? [how] : [])}
+      recommended={recIds.has(action_id || '')}
+      completed={!!completed}
+      onOpenChat={() => {
+        const prompt = typeof how === 'string' ? how : Array.isArray(how) ? how.join('\n') : title;
+        const text = !completed ? `Can you help me with: ${title}?\n${prompt}` : `I completed: ${title}. What should I do next?`;
+        try { window.dispatchEvent(new CustomEvent('pp:open_chat', { detail: { text } })); } catch {}
+      }}
+      onDone={!completed ? (() => markDone(title, action_id)) : undefined}
+      onDismiss={!completed ? (() => dismiss(title, action_id)) : undefined}
+    />
+  );
+
   if ((!uncompleted || uncompleted.length === 0) && (!completedFromRecs || completedFromRecs.length === 0) && (!completedExtra || completedExtra.length === 0)) {
     return <div className="text-sm text-gray-500">No actions yet. Provide more info in chat to unlock your plan.</div>;
   }
@@ -879,26 +859,26 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
           <button className="text-xs underline text-gray-600 hover:text-gray-800" onClick={removeAllCompleted}>Remove all completed</button>
         </div>
       )}
-      {uncompleted.map((r) => (
-        <Item key={`u-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} />
-      ))}
+          {uncompleted.map((r) => (
+            <ActionItem key={`u-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} />
+          ))}
       {completedFromRecs.map((r) => (
-        <Item key={`c-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} completed />
+        <ActionItem key={`c-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} completed />
       ))}
-      {completedExtra.length > 0 && (
-        <div className="pt-1">
+          {completedExtra.length > 0 && (
+            <div className="pt-1">
           {completedExtra.map((it) => (
-            <div key={it.id} className="border rounded-md p-2 bg-white flex items-center justify-between">
+            <div key={it.id} className="border border-border rounded-md p-2 bg-card flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium text-gray-800">{it.title || 'Action'}</div>
-                <div className="text-[11px] text-gray-500">{it.completed_at ? (
+                <div className="text-sm font-medium text-foreground">{it.title || 'Action'}</div>
+                <div className="text-[11px] text-muted">{it.completed_at ? (
                   <time suppressHydrationWarning dateTime={it.completed_at}>
                     {new Date(it.completed_at).toLocaleString('en-US', { timeZone: 'UTC' })}
                   </time>
                 ) : ''}</div>
               </div>
               <button
-                className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                className="text-xs px-2 py-1 rounded border border-border bg-card hover:opacity-90"
                 onClick={() => {
                   const text = `I completed: ${it.title}. What should I do next?`;
                   try { window.dispatchEvent(new CustomEvent('pp:open_chat', { detail: { text } })); } catch {}
@@ -907,7 +887,7 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
                 Ask what’s next
               </button>
               <button
-                className="ml-2 text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
+                className="ml-2 text-xs px-2 py-1 rounded border border-border bg-card hover:opacity-90"
                 onClick={() => dismiss(it.title || '')}
                 title="Remove from plan"
               >
@@ -915,8 +895,8 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
               </button>
             </div>
           ))}
-        </div>
-      )}
+            </div>
+          )}
     </div>
   );
 }

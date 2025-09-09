@@ -25,10 +25,11 @@ export const POST = withHouseholdAccess<z.infer<typeof BodySchema>>(
       if (!check.ok) return NextResponse.json({ error: 'free_limit_exceeded', upgrade_url: (check as any).upgrade_url, login_url: (check as any).login_url }, { status: 402 });
     } catch {}
 
-    const key = data.key;
+    const body = (data ?? {}) as z.infer<typeof BodySchema>;
+    const key = body.key;
     if (!key) return NextResponse.json({ error: 'key_required' }, { status: 400 });
-    const val = parseByKind(data.kind || 'number', data.value);
-    if (val == null && data.kind !== 'text') return NextResponse.json({ error: 'invalid_value' }, { status: 400 });
+    const val = parseByKind(body.kind || 'number', body.value);
+    if (val == null && body.kind !== 'text') return NextResponse.json({ error: 'invalid_value' }, { status: 400 });
 
     const snapshot = await updateSnapshotSingleSlot(householdId as string, key, val, 'high');
     return NextResponse.json({ ok: true, id: snapshot.id, created_at: snapshot.created_at, kpis: snapshot.kpis, gates: (snapshot.kpis as any)?.gates, levels: snapshot.levels, recommendations: snapshot.recommendations });

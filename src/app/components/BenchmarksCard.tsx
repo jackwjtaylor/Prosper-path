@@ -113,7 +113,7 @@ export function BenchmarksCard({ latest, kpis }: { latest: any; kpis: any }) {
 
   const metricsOrder: MetricKey[] = ['level','sr','ef_months','dsr_total','dti','invnw','rrr'];
 
-  if (loading) return <div className="text-sm text-gray-600">Loading peers…</div>;
+  if (loading) return <div className="text-sm text-muted">Loading peers…</div>;
   if (error) return <div className="text-sm text-red-600">{error}</div>;
   if (!data) return null;
 
@@ -150,20 +150,20 @@ export function BenchmarksCard({ latest, kpis }: { latest: any; kpis: any }) {
   
 
   return (
-    <div className="p-3 border rounded-xl bg-white">
+    <div className="p-3 border border-border rounded-xl bg-card">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-sm text-gray-600 font-medium">People like you</div>
-          <div className="text-xs text-gray-700 mt-0.5">
-            <span className="text-base font-semibold text-gray-900 mr-1">{topLine.top}%</span> {topLine.text}
-            <span className="ml-2 text-gray-500">{topLine.detail}</span>
+          <div className="text-sm text-muted font-medium">People like you</div>
+          <div className="text-xs text-muted mt-0.5">
+            <span className="text-base font-semibold text-foreground mr-1">{topLine.top}%</span> {topLine.text}
+            <span className="ml-2 text-muted">{topLine.detail}</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50" onClick={() => setShowDetails(v => !v)} title={showDetails ? 'Hide details' : 'Show details'}>
+          <button className="text-xs px-2 py-1 rounded border border-border bg-card hover:opacity-90" onClick={() => setShowDetails(v => !v)} title={showDetails ? 'Hide details' : 'Show details'}>
             {showDetails ? 'Hide' : 'Details'}
           </button>
-          <button className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50" onClick={share} title="Share your peer comparison">Share</button>
+          <button className="text-xs px-2 py-1 rounded border border-border bg-card hover:opacity-90" onClick={share} title="Share your peer comparison">Share</button>
         </div>
       </div>
       {showDetails && (
@@ -181,8 +181,8 @@ export function BenchmarksCard({ latest, kpis }: { latest: any; kpis: any }) {
           return (
             <div key={m} className="text-xs">
               <div className="flex items-center justify-between">
-                <div className="text-gray-700" title={fmtMetricLabel(m)}>{fmtMetricLabel(m)}</div>
-                <div className="text-gray-600" title={`Your value: ${fmtValue(m, mine)}`}>{pct}</div>
+                <div className="text-foreground" title={fmtMetricLabel(m)}>{fmtMetricLabel(m)}</div>
+                <div className="text-muted" title={`Your value: ${fmtValue(m, mine)}`}>{pct}</div>
               </div>
               <div className="mt-1 h-2 w-full bg-gray-200 rounded relative">
                 {/* p20/p50/p80 ticks */}
@@ -192,7 +192,7 @@ export function BenchmarksCard({ latest, kpis }: { latest: any; kpis: any }) {
                 {/* You marker */}
                 <div className="absolute -top-0.5 h-3 w-[2px] bg-emerald-600 rounded" style={{ left: `${rel * 100}%` }} title={`You: ${fmtValue(m, mine)}`} />
               </div>
-              <div className="flex justify-between text-[10px] text-gray-500 mt-0.5">
+              <div className="flex justify-between text-[10px] text-muted mt-0.5">
                 <span>p20</span><span>p50</span><span>p80</span>
               </div>
             </div>
@@ -200,7 +200,7 @@ export function BenchmarksCard({ latest, kpis }: { latest: any; kpis: any }) {
         })}
       </div>
       )}
-      <div className="mt-2 text-[11px] text-gray-500">n = {data.n} {data.fallback ? '(synthetic cohort)' : ''}</div>
+      <div className="mt-2 text-[11px] text-muted">n = {data.n} {data.fallback ? '(synthetic cohort)' : ''}</div>
     </div>
   );
 }

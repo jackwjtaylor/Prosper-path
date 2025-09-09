@@ -11,6 +11,7 @@ type AppStoreState = {
   isAudioPlaybackEnabled: boolean;
   voice: string;
   isMicMuted: boolean;
+  isTranscriptVisible: boolean;
 };
 
 type AppStoreActions = {
@@ -21,6 +22,7 @@ type AppStoreActions = {
   setIsAudioPlaybackEnabled: (v: boolean) => void;
   setVoice: (v: string) => void;
   setIsMicMuted: (v: boolean) => void;
+  setIsTranscriptVisible: (v: boolean) => void;
 };
 
 export type AppStore = AppStoreState & AppStoreActions;
@@ -53,6 +55,7 @@ let state: AppStore = {
   isAudioPlaybackEnabled: typeof window !== 'undefined' ? readPersistedBoolean('audioPlaybackEnabled', true) : true,
   voice: typeof window !== 'undefined' ? readPersistedString('voice', 'sage') : 'sage',
   isMicMuted: typeof window !== 'undefined' ? readPersistedBoolean('micMuted', false) : false,
+  isTranscriptVisible: typeof window !== 'undefined' ? readPersistedBoolean('transcriptVisible', true) : true,
 
   setSessionStatus: (s) => setState({ sessionStatus: s }),
   setSelectedAgentName: (name) => setState({ selectedAgentName: name }),
@@ -61,6 +64,7 @@ let state: AppStore = {
   setIsAudioPlaybackEnabled: (v) => setState({ isAudioPlaybackEnabled: v }),
   setVoice: (v) => setState({ voice: v }),
   setIsMicMuted: (v) => setState({ isMicMuted: v }),
+  setIsTranscriptVisible: (v) => setState({ isTranscriptVisible: v }),
 };
 
 function setState(partial: Partial<AppStoreState>) {
@@ -71,6 +75,7 @@ function setState(partial: Partial<AppStoreState>) {
     if (partial.hasOwnProperty('isAudioPlaybackEnabled')) localStorage.setItem('audioPlaybackEnabled', String(state.isAudioPlaybackEnabled));
     if (partial.hasOwnProperty('voice')) localStorage.setItem('voice', String(state.voice));
     if (partial.hasOwnProperty('isMicMuted')) localStorage.setItem('micMuted', String(state.isMicMuted));
+    if (partial.hasOwnProperty('isTranscriptVisible')) localStorage.setItem('transcriptVisible', String(state.isTranscriptVisible));
   } catch {}
   listeners.forEach((l) => l());
 }

@@ -10,6 +10,7 @@ import Dashboard from "./components/Dashboard";
 import LeftPaneControls from "./components/LeftPaneControls";
 import ChatPanel from "./components/ChatPanel";
 import VoiceDock from "./components/VoiceDock";
+import ThemeToggle from "./components/ThemeToggle";
 
 import { SessionStatus } from "@/app/types";
 import type { RealtimeAgent } from "@openai/agents/realtime";
@@ -369,6 +370,24 @@ function App() {
   }, [sessionStatus]);
 
   const [activeTab, setActiveTab] = useState('chat' as 'chat' | 'dashboard');
+  const isTranscriptVisible = useAppStore(s => s.isTranscriptVisible);
+  const [shouldRenderChat, setShouldRenderChat] = useState(true);
+  const [showChatColumn, setShowChatColumn] = useState(true);
+
+  // Animate transcript hide: slide left then collapse column
+  useEffect(() => {
+    if (isTranscriptVisible) {
+      setShowChatColumn(true);
+      setShouldRenderChat(true);
+    } else {
+      // keep rendered for animation, then collapse
+      const t = setTimeout(() => {
+        setShowChatColumn(false);
+        setShouldRenderChat(false);
+      }, 320);
+      return () => clearTimeout(t);
+    }
+  }, [isTranscriptVisible]);
 
   // Allow dashboard to request opening chat with prefilled text
   useEffect(() => {
@@ -392,7 +411,7 @@ function App() {
   return (
     <div className="text-base flex flex-col h-screen bg-app text-foreground">
       {/* Header */}
-      <div className="p-5 text-lg font-semibold flex justify-between items-center max-w-7xl mx-auto w-full relative">
+      <div className="p-5 text-lg font-semibold flex justify-between items-center max-w-7xl mx-auto w-full relative border-b border-border bg-card backdrop-blur">
         <Link href="/home" className="flex items-center">
           <Image src="2D76K394.eps.svg" alt="Prosper Logo" width={20} height={20} className="mr-2" />
           <span>Prosper AI <span className="text-gray-400">your personal wealth coach</span></span>
@@ -402,6 +421,9 @@ function App() {
           <Link href="/pricing" className="text-gray-700 hover:text-gray-900">Pricing</Link>
           <Link href="/feedback" className="text-gray-700 hover:text-gray-900">Feedback</Link>
         </nav>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+        </div>
         <ProfileMenu
           householdId={householdId}
           entitlements={entitlements}
@@ -412,16 +434,22 @@ function App() {
       {/* BODY: centered 2-col grid so the left pane sizes cleanly */}
       <div className="flex-1 w-full min-h-0">
         <div className="max-w-7xl mx-auto px-2 h-full min-h-0 pb-16 lg:pb-0">
-          <div className="hidden lg:grid grid-cols-1 lg:grid-cols-[520px_1fr] gap-4 h-full min-h-0">
-            {/* Left column: Integrated Chat Panel */}
-            <ChatPanel
-              userText={userText}
-              setUserText={setUserText}
-              onSendMessage={handleSendTextMessage}
-              onToggleConnection={onToggleConnection}
-            />
+          <div className={`hidden lg:grid grid-cols-1 ${showChatColumn ? 'lg:grid-cols-[520px_1fr]' : 'lg:grid-cols-1'} gap-4 h-full min-h-0`}>
+            {/* Left column: Integrated Chat Panel (animates out) */}
+            {showChatColumn && (
+              <div className={`transition-all duration-300 ease-out ${isTranscriptVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-full pointer-events-none'}`}>
+                {shouldRenderChat && (
+                  <ChatPanel
+                    userText={userText}
+                    setUserText={setUserText}
+                    onSendMessage={handleSendTextMessage}
+                    onToggleConnection={onToggleConnection}
+                  />
+                )}
+              </div>
+            )}
 
-            {/* Right column: Dashboard (unchanged component) */}
+            {/* Right column: Dashboard expands to full width when transcript hidden */}
             <Dashboard />
           </div>
 
@@ -573,53 +601,53 @@ function ProfileMenu({ householdId, entitlements, household }: { householdId: st
         <span className="text-[11px] font-semibold">{initials}</span>
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 mt-2 w-64 bg-white border rounded-lg shadow-lg z-50">
-          <div className="px-3 py-2 border-b">
-            <div className="text-sm font-medium text-gray-900 truncate">{fullName || 'Guest'}</div>
-            <div className="text-xs text-gray-600 truncate">{email || 'No email'}</div>
-            <div className="text-[11px] text-gray-500 mt-1">Plan: <b className={plan === 'premium' ? 'text-emerald-600' : 'text-gray-700'}>{plan}</b></div>
+        <div role="menu" className="absolute right-0 mt-2 w-64 bg-card border border-border rounded-lg shadow-lg z-50">
+          <div className="px-3 py-2 border-b border-border">
+            <div className="text-sm font-medium text-foreground truncate">{fullName || 'Guest'}</div>
+            <div className="text-xs text-muted truncate">{email || 'No email'}</div>
+            <div className="text-[11px] text-muted mt-1">Plan: <b className={plan === 'premium' ? 'text-emerald-600' : 'text-foreground'}>{plan}</b></div>
           </div>
           <div className="py-1 text-sm">
-            <button className="w-full text-left px-3 py-2 hover:bg-gray-50" onClick={() => { setShowEdit(true); setOpen(false); }}>Edit profile</button>
-            <button className="w-full text-left px-3 py-2 hover:bg-gray-50" onClick={openUserData}>Review data</button>
-            <button className="w-full text-left px-3 py-2 hover:bg-gray-50 text-red-600" onClick={() => { setShowDelete(true); setOpen(false); }}>Delete my data…</button>
+            <button className="w-full text-left px-3 py-2 hover:opacity-90" onClick={() => { setShowEdit(true); setOpen(false); }}>Edit profile</button>
+            <button className="w-full text-left px-3 py-2 hover:opacity-90" onClick={openUserData}>Review data</button>
+            <button className="w-full text-left px-3 py-2 hover:opacity-90 text-red-600" onClick={() => { setShowDelete(true); setOpen(false); }}>Delete my data…</button>
             {plan === 'premium' ? (
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50" onClick={managePlan}>Manage plan</button>
+              <button className="w-full text-left px-3 py-2 hover:opacity-90" onClick={managePlan}>Manage plan</button>
             ) : (
-              <button className="w-full text-left px-3 py-2 hover:bg-gray-50" onClick={upgrade}>Upgrade to Premium</button>
+              <button className="w-full text-left px-3 py-2 hover:opacity-90" onClick={upgrade}>Upgrade to Premium</button>
             )}
-            <a className="block px-3 py-2 hover:bg-gray-50" href="/feedback">Send feedback</a>
-            <a className="block px-3 py-2 hover:bg-gray-50" href="/contact">Contact us</a>
-            <a className="block px-3 py-2 hover:bg-gray-50" href="/terms" target="_blank" rel="noreferrer">Terms</a>
-            <a className="block px-3 py-2 hover:bg-gray-50" href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
+            <a className="block px-3 py-2 hover:opacity-90" href="/feedback">Send feedback</a>
+            <a className="block px-3 py-2 hover:opacity-90" href="/contact">Contact us</a>
+            <a className="block px-3 py-2 hover:opacity-90" href="/terms" target="_blank" rel="noreferrer">Terms</a>
+            <a className="block px-3 py-2 hover:opacity-90" href="/privacy" target="_blank" rel="noreferrer">Privacy</a>
             {!authed ? (
-              <a className="block px-3 py-2 hover:bg-gray-50" href="/login" onClick={() => setOpen(false)}>Sign in</a>
+              <a className="block px-3 py-2 hover:opacity-90" href="/login" onClick={() => setOpen(false)}>Sign in</a>
             ) : (
               <button
-                className="w-full text-left px-3 py-2 hover:bg-gray-50"
+                className="w-full text-left px-3 py-2 hover:opacity-90"
                 onClick={async () => { try { await getSupabaseClient()?.auth.signOut(); } catch {}; setOpen(false); }}
               >
                 Log out
               </button>
             )}
           </div>
-          <div className="px-3 py-2 border-t flex items-center justify-between">
-            <div className="text-[11px] text-gray-500 truncate">ID: {householdId?.slice(0, 6)}…</div>
-            <button className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50" onClick={copyHouseholdId}>Copy</button>
+          <div className="px-3 py-2 border-t border-border flex items-center justify-between">
+            <div className="text-[11px] text-muted truncate">ID: {householdId?.slice(0, 6)}…</div>
+            <button className="text-xs px-2 py-1 rounded border border-border bg-card hover:opacity-90" onClick={copyHouseholdId}>Copy</button>
           </div>
         </div>
       )}
 
       {showEdit && (
         <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setShowEdit(false)}>
-          <div className="bg-white rounded-lg border shadow-lg w-full max-w-sm p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="text-sm font-medium text-gray-900 mb-2">Edit profile</div>
-            <label className="block text-xs text-gray-600">Full name</label>
+          <div className="bg-card rounded-lg border border-border shadow-lg w-full max-w-sm p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="text-sm font-medium text-foreground mb-2">Edit profile</div>
+            <label className="block text-xs text-muted">Full name</label>
             <input className="w-full border rounded px-3 py-2 text-sm mb-2" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Your name" />
-            <label className="block text-xs text-gray-600">Email</label>
+            <label className="block text-xs text-muted">Email</label>
             <input className="w-full border rounded px-3 py-2 text-sm" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />
             <div className="mt-3 flex justify-end gap-2">
-              <button className="text-xs px-3 py-1.5 rounded border bg-white hover:bg-gray-50" onClick={() => setShowEdit(false)}>Cancel</button>
+              <button className="text-xs px-3 py-1.5 rounded border border-border bg-card hover:opacity-90" onClick={() => setShowEdit(false)}>Cancel</button>
               <button className="text-xs px-3 py-1.5 rounded border bg-gray-900 text-white hover:bg-gray-800" onClick={saveProfile}>Save</button>
             </div>
           </div>
@@ -628,14 +656,14 @@ function ProfileMenu({ householdId, entitlements, household }: { householdId: st
 
       {showDelete && (
         <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setShowDelete(false)}>
-          <div className="bg-white rounded-lg border shadow-lg w-full max-w-sm p-4" onClick={(e) => e.stopPropagation()}>
-            <div className="text-sm font-medium text-gray-900 mb-2">Delete my data</div>
-            <p className="text-xs text-gray-700">
+          <div className="bg-card rounded-lg border border-border shadow-lg w-full max-w-sm p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="text-sm font-medium text-foreground mb-2">Delete my data</div>
+            <p className="text-xs text-muted">
               This will permanently delete your household, snapshots, actions, and net-worth history from Prosper.
             </p>
-            <p className="text-xs text-gray-700 mt-2">This cannot be undone.</p>
+            <p className="text-xs text-muted mt-2">This cannot be undone.</p>
             <div className="mt-3 flex justify-end gap-2">
-              <button className="text-xs px-3 py-1.5 rounded border bg-white hover:bg-gray-50" onClick={() => setShowDelete(false)}>Cancel</button>
+              <button className="text-xs px-3 py-1.5 rounded border border-border bg-card hover:opacity-90" onClick={() => setShowDelete(false)}>Cancel</button>
               <button className="text-xs px-3 py-1.5 rounded border bg-red-600 text-white hover:bg-red-700" onClick={deleteData}>Delete</button>
             </div>
           </div>

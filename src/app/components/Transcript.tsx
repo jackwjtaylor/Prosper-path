@@ -50,9 +50,9 @@ function Transcript({
   }, [canSend]);
 
   return (
-    <div className="flex flex-col flex-1 bg-white min-h-0 rounded-xl">
+    <div className="flex flex-col flex-1 bg-card min-h-0 rounded-xl">
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="flex items-center justify-between px-4 py-2 sticky top-0 z-10 text-base border-b bg-white rounded-t-xl">
+        <div className="flex items-center justify-between px-4 py-2 sticky top-0 z-10 text-base border-b border-border bg-card rounded-t-xl">
           <span className="font-semibold flex items-center gap-2">
   <span className="relative inline-flex items-center justify-center">
     {canSend ? (
@@ -95,7 +95,7 @@ function Transcript({
               if (type === "MESSAGE") {
                 const isUser = role === "user";
                 const containerClasses = `flex justify-end flex-col ${isUser ? "items-end" : "items-start"}`;
-                const bubbleBase = `max-w-lg p-3 ${isUser ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-black"}`;
+                const bubbleBase = `max-w-lg p-3 ${isUser ? "bg-gray-900 text-gray-100" : "bg-white border border-border text-foreground"}`;
                 const isBracketedMessage = title.startsWith("[") && title.endsWith("]");
                 const messageStyle = isBracketedMessage ? "italic text-gray-400" : "";
                 const displayTitle = isBracketedMessage ? title.slice(1, -1) : title;
@@ -166,7 +166,7 @@ function Transcript({
         </div>
       </div>
 
-      <div className="p-4 flex items-center gap-x-2 flex-shrink-0 border-t border-gray-200">
+      <div className="p-4 flex items-center gap-x-2 flex-shrink-0 border-t border-border bg-card rounded-b-xl">
         <input
           ref={inputRef}
           type="text"

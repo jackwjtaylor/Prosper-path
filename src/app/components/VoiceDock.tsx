@@ -14,6 +14,8 @@ export default function VoiceDock({ onToggleConnection }: VoiceDockProps) {
   const sessionStatus = useAppStore(s => s.sessionStatus);
   const isMicMuted = useAppStore(s => s.isMicMuted);
   const setIsMicMuted = useAppStore(s => s.setIsMicMuted);
+  const isTranscriptVisible = useAppStore(s => s.isTranscriptVisible);
+  const setIsTranscriptVisible = useAppStore(s => s.setIsTranscriptVisible);
   const connected = sessionStatus === "CONNECTED";
   const connecting = sessionStatus === "CONNECTING";
 
@@ -52,8 +54,15 @@ export default function VoiceDock({ onToggleConnection }: VoiceDockProps) {
           )}
           <span className="relative text-[10px]">{isMicMuted ? 'M' : 'Mic'}</span>
         </button>
+        <button
+          onClick={() => setIsTranscriptVisible(!isTranscriptVisible)}
+          aria-pressed={isTranscriptVisible}
+          className="h-8 px-3 rounded-md text-xs font-medium border shadow-sm bg-card"
+          title={isTranscriptVisible ? 'Hide transcript' : 'Show transcript'}
+        >
+          {isTranscriptVisible ? 'Hide transcript' : 'Show transcript'}
+        </button>
       </div>
     </div>
   );
 }
-
