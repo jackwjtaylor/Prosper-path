@@ -6,6 +6,7 @@ import { getProsperLevelLabel } from "@/app/lib/prosperLevelLabels";
 import { normaliseCurrency } from "@/app/lib/validate";
 import { normaliseSlots } from "@/app/lib/normalise";
 import BenchmarksCard from "@/app/components/BenchmarksCard";
+import LevelPill from "@/app/components/ui/LevelPill";
 
 /** ===== Types expected from /api/prosper/dashboard ===== */
 export type SeriesPoint = { ts: string; value: number };
@@ -450,36 +451,23 @@ export default function Dashboard() {
           <div className="xl:col-span-5">
             <Card className="p-3">
               <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-xs text-gray-600">Level</div>
-                  <div className="text-sm font-semibold leading-tight">Level {overallIdx} — {overallLevelLabel}</div>
-                  <div className="text-xs text-gray-600 mt-1">{LEVEL_DESCRIPTIONS[overallIdx - 1]}</div>
+                <div className="min-w-0">
+                  <div className="text-xs text-muted">Level</div>
+                  <div className="flex items-center gap-3 mt-1">
+                    <LevelPill level={overallIdx} />
+                    <div className="text-sm font-semibold leading-tight truncate">{overallLevelLabel}</div>
+                  </div>
+                  <div className="text-xs ink-muted mt-1">{LEVEL_DESCRIPTIONS[overallIdx - 1]}</div>
                 </div>
               </div>
-              {/* Journey bar across full width with 10 steps labeled 1-10 */}
+              {/* Journey labels */}
               <div className="mt-2">
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: 10 }).map((_, i) => {
-                    const curIndex = overallIdx - 1;
-                    const completed = i < curIndex;
-                    const current = i === curIndex;
-                    const next = i === Math.min(9, curIndex + 1);
-                    const cls = current
-                      ? 'bg-emerald-500'
-                      : completed
-                      ? 'bg-emerald-200'
-                      : next
-                      ? 'bg-yellow-400'
-                      : 'bg-gray-200';
-                    return <div key={i} className={`h-2 flex-1 rounded ${cls}`} title={`Level ${i+1} — ${getProsperLevelLabel(i+1)}`} />;
-                  })}
-                </div>
-                <div className="grid grid-cols-10 gap-1 mt-1 text-[9px] leading-3 text-gray-600 text-center">
+                <div className="grid grid-cols-10 gap-1 text-[9px] leading-3 text-muted text-center">
                   {Array.from({ length: 10 }).map((_, i) => (
                     <div key={i} className="truncate" title={`Level ${i+1} — ${getProsperLevelLabel(i+1)}`}>{LEVEL_SHORT_NAMES[i]}</div>
                   ))}
                 </div>
-                <div className="mt-1 text-[11px] text-gray-700">
+                <div className="mt-1 text-[11px] ink-muted">
                   Next: Level {Math.min(10, overallIdx + 1)} — {LEVEL_SHORT_NAMES[Math.min(9, overallIdx)]}. {LEVEL_DESCRIPTIONS[Math.min(9, overallIdx)]}
                 </div>
               </div>
@@ -545,7 +533,7 @@ export default function Dashboard() {
 
 /** Small card wrapper for consistent styling */
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`bg-white border rounded-xl shadow-sm ${className}`}>{children}</div>;
+  return <div className={`bg-card border border-border rounded-xl shadow-sm ${className}`}>{children}</div>;
 }
 
 function V2KpiBar({

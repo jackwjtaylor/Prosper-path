@@ -2,21 +2,91 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens (semantic-first) */
 :root {
+  /* Color tokens (light default) */
+  --brand: #0f766e;           /* emerald-700 */
+  --brand-ink: #0b4d49;       /* deep brand */
+  --ok: #0e7490;              /* cyan-700 */
+  --warn: #b45309;            /* amber-700 */
+  --risk: #be123c;            /* rose-700 */
+
   --background: #fafafa;
   --foreground: #171717;
+  --bg: #ffffff;
+  --card: #ffffff;
+  --muted: #6b7280;           /* gray-500 */
+  --border: #e5e7eb;          /* gray-200 */
+
+  /* Shape + spacing */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;  --space-4: 16px;
+  --space-6: 24px; --space-8: 32px; --space-12: 48px;
 }
 
+/* Dark theme (auto via media, can be overridden by data-theme) */
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
-    --foreground: #ededed;
+    --foreground: #e5e7eb;
+    --bg: #0b0d0e;     /* near black */
+    --card: #111315;   /* dark card */
+    --muted: #9ca3af;  /* gray-400 */
+    --border: #1f2937; /* gray-800 */
   }
 }
 
+/* Explicit theme overrides */
+[data-theme="light"] {
+  --background: #fafafa;
+  --foreground: #171717;
+  --bg: #ffffff;
+  --card: #ffffff;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+}
+
+[data-theme="dark"] {
+  --background: #0a0a0a;
+  --foreground: #e5e7eb;
+  --bg: #0b0d0e;
+  --card: #111315;
+  --muted: #9ca3af;
+  --border: #1f2937;
+}
+
+/* Base typography + layout */
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-variant-numeric: tabular-nums; /* Better number alignment */
 }
+
+/* Focus ring: consistent and accessible */
+*:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--brand) 60%, white);
+  outline-offset: 2px;
+}
+
+/* Motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Utility classes grounded in tokens */
+.card-surface { background-color: var(--card); border-color: var(--border); border-width: 1px; border-style: solid; border-radius: var(--radius-md); }
+.ink-muted { color: var(--muted); }
+.ink-strong { color: var(--foreground); }
+.brand { color: var(--brand); }
+.bg-brand { background-color: var(--brand); }
+.bg-app { background-color: var(--bg); }
+.num { font-variant-numeric: tabular-nums; }

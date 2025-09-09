@@ -9,6 +9,7 @@ import Transcript from "./components/Transcript";
 import Dashboard from "./components/Dashboard";
 import LeftPaneControls from "./components/LeftPaneControls";
 import ChatPanel from "./components/ChatPanel";
+import VoiceDock from "./components/VoiceDock";
 
 import { SessionStatus } from "@/app/types";
 import type { RealtimeAgent } from "@openai/agents/realtime";
@@ -389,7 +390,7 @@ function App() {
   }, []);
 
   return (
-    <div className="text-base flex flex-col h-screen bg-gray-100 text-gray-800">
+    <div className="text-base flex flex-col h-screen bg-app text-foreground">
       {/* Header */}
       <div className="p-5 text-lg font-semibold flex justify-between items-center max-w-7xl mx-auto w-full relative">
         <Link href="/home" className="flex items-center">
@@ -440,7 +441,7 @@ function App() {
         </div>
 
         {/* Bottom mobile voice-first nav */}
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-sm z-40">
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border shadow-sm z-40">
           <div className="max-w-7xl mx-auto px-3">
             <div className="flex items-center justify-between py-2 gap-2">
               <button
@@ -478,6 +479,8 @@ function App() {
           </div>
         </div>
       </div>
+      {/* Desktop Voice Dock */}
+      <VoiceDock onToggleConnection={onToggleConnection} />
       {/* Consent modal removed; greet-and-consent handled by agent */}
     </div>
   );
