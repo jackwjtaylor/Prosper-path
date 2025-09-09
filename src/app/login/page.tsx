@@ -71,7 +71,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
         <div className="flex items-center justify-center mb-2">
-          <img src="/2D76K394f.eps.svg" alt="Prosper Logo" className="h-10 w-10" />
+          <img src="/2D76K394.eps.svg" alt="Prosper Logo" className="h-10 w-10" />
         </div>
         <h1 className="text-xl font-semibold mb-4 text-center">Sign in to Prosper</h1>
         <div className="space-y-3">

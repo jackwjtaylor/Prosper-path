@@ -3,8 +3,9 @@
 import { RealtimeAgent, RealtimeItem, tool } from "@openai/agents/realtime";
 import { computeKpisV2 } from "@/app/lib/kpiEngine";
 import { assignLevelsV2 } from "@/app/lib/levelEngine";
-import { generateRecommendations } from "@/app/lib/prosperTools";
+import { generateTwoBestActions } from "@/app/lib/recommendationsV2";
 import type { Slots } from "@/app/lib/schema/slots";
+import { SessionState, computeFingerprint } from "@/app/agentConfigs/sessionState";
 
 // -------------------- lightweight client helpers --------------------
 async function getHouseholdIdClient(): Promise<string> {
@@ -39,14 +40,15 @@ async function getAuthHeader(): Promise<Record<string, string> | {}> {
   }
 }
 
-// -------------------- session-local state --------------------
-let lastInputs: Record<string, any> | null = null;
-let lastSlots: Slots | null = null;
-let lastKpis: any = null;
-let lastGates: any = null;
-let lastLevels: any = null;
-let lastPersistFingerprint: string | null = null;
-let lastRecommendations: any = null;
+// -------------------- per-session state (avoid module-level mutation) --------------------
+function getSessionState(details?: any): SessionState {
+  const ctx = (details && details.context) ? details.context : ({} as any);
+  if (!ctx.sessionState) {
+    ctx.sessionState = new SessionState();
+    if (details && !details.context) details.context = ctx;
+  }
+  return ctx.sessionState as SessionState;
+}
 
 // Minimal sufficiency check to avoid empty computes
 function missingForSufficiency(slots?: any, inputs?: Record<string, any>): string[] {
@@ -85,7 +87,8 @@ export const rehydrate = tool({
   name: "rehydrate",
   description: "Load latest saved snapshot and entitlements for this browser household.",
   parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
-  execute: async () => {
+  execute: async (_input: any, details?: any) => {
+    const state = getSessionState(details);
     try {
       const hh = await getHouseholdIdClient();
       const r = await fetch(`/api/prosper/dashboard?householdId=${encodeURIComponent(hh)}`, { cache: 'no-store', headers: { ...(await getAuthHeader()) } });
@@ -93,10 +96,10 @@ export const rehydrate = tool({
         const d = await r.json();
         const snap = d?.latestSnapshot || null;
         if (snap) {
-          lastInputs = snap.inputs || {};
-          lastKpis = snap.kpis || null;
-          lastLevels = snap.levels || null;
-          if ((lastInputs as any)?.slots) lastSlots = (lastInputs as any).slots as Slots;
+          state.lastInputs = snap.inputs || {};
+          state.lastKpis = snap.kpis || null;
+          state.lastLevels = snap.levels || null;
+          if ((state.lastInputs as any)?.slots) state.lastSlots = (state.lastInputs as any).slots as Slots;
         }
         return { ok: true, householdId: hh, exists: !!snap, entitlements: d?.entitlements || null };
       }
@@ -131,26 +134,27 @@ export const update_profile = tool({
     additionalProperties: false,
   },
   execute: async (input: any, details?: any) => {
+    const state = getSessionState(details);
     const addBreadcrumb = details?.context?.addTranscriptBreadcrumb as undefined | ((t: string, d?: any) => void);
     // Merge raw inputs (MQS-style) if provided
     if (input?.inputs && typeof input.inputs === 'object') {
-      lastInputs = { ...(lastInputs || {}), ...(input.inputs as any) };
+      state.lastInputs = { ...(state.lastInputs || {}), ...(input.inputs as any) };
     }
     // Merge batch slot updates
     if (input?.slots && typeof input.slots === 'object') {
-      lastSlots = { ...(lastSlots || {}) } as any;
+      state.lastSlots = { ...(state.lastSlots || {}) } as any;
       for (const [k, v] of Object.entries(input.slots as Record<string, any>)) {
-        (lastSlots as any)[k] = { value: (v as any)?.value ?? null, confidence: (v as any)?.confidence ?? 'med' };
+        (state.lastSlots as any)[k] = { value: (v as any)?.value ?? null, confidence: (v as any)?.confidence ?? 'med' };
       }
     }
     // Single key/value update convenience
     if (typeof input?.key === 'string') {
       const conf = input?.confidence || 'med';
-      lastSlots = { ...(lastSlots || {}) } as any;
-      (lastSlots as any)[input.key] = { value: input?.value ?? null, confidence: conf };
+      state.lastSlots = { ...(state.lastSlots || {}) } as any;
+      (state.lastSlots as any)[input.key] = { value: input?.value ?? null, confidence: conf };
     }
     // Keep slots inside inputs for persistence
-    if (lastSlots) lastInputs = { ...(lastInputs || {}), slots: lastSlots };
+    if (state.lastSlots) state.lastInputs = { ...(state.lastInputs || {}), slots: state.lastSlots };
     if (addBreadcrumb) addBreadcrumb('function call: updateProfile', { updatedKeys: Object.keys((input?.slots || {})) });
     return { ok: true };
   },
@@ -177,6 +181,7 @@ export const apply_delta_and_persist = tool({
     additionalProperties: false,
   },
   execute: async (input: any, details?: any) => {
+    const state = getSessionState(details);
     const addBreadcrumb = details?.context?.addTranscriptBreadcrumb as undefined | ((t: string, d?: any) => void);
     try {
       const res = await fetch('/api/prosper/apply', {
@@ -194,12 +199,12 @@ export const apply_delta_and_persist = tool({
       }
       if (!res.ok || !j?.snapshot) return { ok: false, error: j?.error || 'apply_failed' };
       const snap = j.snapshot as any;
-      lastInputs = snap.inputs || {};
-      lastSlots = (lastInputs as any)?.slots || null;
-      lastKpis = snap.kpis || null;
-      lastLevels = snap.levels || null;
-      lastRecommendations = snap.recommendations || null;
-      lastPersistFingerprint = JSON.stringify({ i: lastInputs, k: lastKpis, l: lastLevels, a: lastRecommendations });
+      state.lastInputs = snap.inputs || {};
+      state.lastSlots = (state.lastInputs as any)?.slots || null;
+      state.lastKpis = snap.kpis || null;
+      state.lastLevels = snap.levels || null;
+      state.lastRecommendations = snap.recommendations || null;
+      state.lastPersistFingerprint = JSON.stringify({ i: state.lastInputs, k: state.lastKpis, l: state.lastLevels, a: state.lastRecommendations });
       try { window.dispatchEvent(new CustomEvent('pp:snapshot_saved', { detail: { via: 'apply' } })); } catch {}
       if (addBreadcrumb) addBreadcrumb('Saving your details…');
       return { ok: true, snapshot: snap };
@@ -228,6 +233,7 @@ export const apply_slot_deltas = tool({
     additionalProperties: false,
   },
   execute: async (input: any, details?: any) => {
+    const state = getSessionState(details);
     const addBreadcrumb = details?.context?.addTranscriptBreadcrumb as undefined | ((t: string, d?: any) => void);
     try {
       const res = await fetch('/api/prosper/delta', {
@@ -245,12 +251,12 @@ export const apply_slot_deltas = tool({
       }
       if (!res.ok || !j?.snapshot) return { ok: false, error: j?.error || 'delta_failed' };
       const snap = j.snapshot as any;
-      lastInputs = snap.inputs || {};
-      lastSlots = (lastInputs as any)?.slots || null;
-      lastKpis = snap.kpis || null;
-      lastLevels = snap.levels || null;
-      lastRecommendations = snap.recommendations || null;
-      lastPersistFingerprint = JSON.stringify({ i: lastInputs, k: lastKpis, l: lastLevels, a: lastRecommendations });
+      state.lastInputs = snap.inputs || {};
+      state.lastSlots = (state.lastInputs as any)?.slots || null;
+      state.lastKpis = snap.kpis || null;
+      state.lastLevels = snap.levels || null;
+      state.lastRecommendations = snap.recommendations || null;
+      state.lastPersistFingerprint = JSON.stringify({ i: state.lastInputs, k: state.lastKpis, l: state.lastLevels, a: state.lastRecommendations });
       try { window.dispatchEvent(new CustomEvent('pp:snapshot_saved', { detail: { via: 'delta' } })); } catch {}
       if (addBreadcrumb) addBreadcrumb('Saving your details…');
       return { ok: true, snapshot: snap };
@@ -272,25 +278,26 @@ export const compute_kpis = tool({
     additionalProperties: false,
   },
   execute: async (input: any, details?: any) => {
+    const state = getSessionState(details);
     const addBreadcrumb = details?.context?.addTranscriptBreadcrumb as undefined | ((t: string, d?: any) => void);
     const p = (input?.profile_json || {}) as Record<string, any>;
     // Merge new inputs into session state
-    lastInputs = { ...(lastInputs || {}), ...p };
+    state.lastInputs = { ...(state.lastInputs || {}), ...p };
     const incomingSlots: Slots | undefined = (p?.slots as Slots) || undefined;
-    if (incomingSlots) lastSlots = { ...(lastSlots || {}), ...incomingSlots } as any;
+    if (incomingSlots) state.lastSlots = { ...(state.lastSlots || {}), ...incomingSlots } as any;
 
-    const missing = missingForSufficiency(lastSlots, lastInputs || {});
+    const missing = missingForSufficiency(state.lastSlots, state.lastInputs || {});
     if (missing.length > 0) {
       return { skipped: true, reason: "insufficient_fields", missing };
     }
 
-    if (!lastSlots) {
+    if (!state.lastSlots) {
       return { skipped: true, reason: "no_slots", message: "Provide v2 slots to compute KPIs." };
     }
 
-    const { kpis, gates, normalized, provisional } = computeKpisV2(lastSlots);
-    lastKpis = kpis;
-    lastGates = gates;
+    const { kpis, gates, normalized, provisional } = computeKpisV2(state.lastSlots);
+    state.lastKpis = kpis;
+    state.lastGates = gates;
     if (addBreadcrumb) addBreadcrumb('function call: computeKpis');
     return { kpis, gates, normalized, provisional };
   },
@@ -309,32 +316,33 @@ export const assign_levels = tool({
     additionalProperties: false,
   },
   execute: async (input: any, details?: any) => {
+    const state = getSessionState(details);
     const addBreadcrumb = details?.context?.addTranscriptBreadcrumb as undefined | ((t: string, d?: any) => void);
-    const k = (input?.kpis || lastKpis) as any;
-    const g = (input?.gates || lastGates) as any;
+    const k = (input?.kpis || state.lastKpis) as any;
+    const g = (input?.gates || state.lastGates) as any;
     if (!k) return { skipped: true, reason: "no_kpis" };
     const levels = assignLevelsV2(k, g || {});
-    lastLevels = levels;
+    state.lastLevels = levels;
     if (addBreadcrumb) addBreadcrumb('function call: assignProsperLevels');
-    // Autosave snapshot to keep dashboard/review in sync (toggle via NEXT_PUBLIC_AUTOSAVE=0)
+    // Autosave snapshot to keep dashboard/review in sync (toggle via NEXT_PUBLIC_AUTOSAVE=1)
     try {
-      const AUTOSAVE = (process?.env?.NEXT_PUBLIC_AUTOSAVE ?? '1') !== '0';
+      const AUTOSAVE = (process?.env?.NEXT_PUBLIC_AUTOSAVE === '1');
       if (AUTOSAVE) {
-        const fingerprint = JSON.stringify({ i: lastInputs || {}, k: lastKpis || {}, l: lastLevels || {} });
-        if (fingerprint && fingerprint !== lastPersistFingerprint) {
+        const fingerprint = computeFingerprint(state);
+        if (fingerprint && fingerprint !== state.lastPersistFingerprint) {
           const hh = await getHouseholdIdClient();
           const payload: any = {
             householdId: hh,
-            inputs: lastInputs || {},
-            kpis: { ...(lastKpis || {}), engine_version: 'v2', gates: lastGates || {} },
-            levels: lastLevels || {},
+            inputs: state.lastInputs || {},
+            kpis: { ...(state.lastKpis || {}), engine_version: 'v2', gates: state.lastGates || {} },
+            levels: state.lastLevels || {},
             provisional_keys: [],
           };
           const res = await fetch('/api/prosper/snapshots', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
           });
           if (res.ok) {
-            lastPersistFingerprint = fingerprint;
+            state.lastPersistFingerprint = fingerprint;
             try { window.dispatchEvent(new CustomEvent('pp:snapshot_saved', { detail: { autosave: true } })); } catch {}
             try { addBreadcrumb && addBreadcrumb('Saving your details…'); } catch {}
           }
@@ -359,34 +367,34 @@ export const map_triggers = tool({
     additionalProperties: false,
   },
   execute: async (input: any, details?: any) => {
+    const state = getSessionState(details);
     const addBreadcrumb = details?.context?.addTranscriptBreadcrumb as undefined | ((t: string, d?: any) => void);
-    const k = (input?.kpis || lastKpis) as any;
-    const lv = (input?.levels || lastLevels) as any;
-    const prefs = (input?.preferences || {}) as any;
+    const k = (input?.kpis || state.lastKpis) as any;
+    const g = (input?.gates || state.lastGates || {}) as any;
     if (!k) return { skipped: true, reason: "no_kpis" };
-    const actions = generateRecommendations(k, lv || {}, prefs);
-    lastRecommendations = actions;
+    const actions = generateTwoBestActions(k, g);
+    state.lastRecommendations = actions;
     if (addBreadcrumb) addBreadcrumb('function call: generateRecommendations');
-    // Autosave snapshot including recommendations (toggle via NEXT_PUBLIC_AUTOSAVE=0)
+    // Autosave snapshot including recommendations (toggle via NEXT_PUBLIC_AUTOSAVE=1)
     try {
-      const AUTOSAVE = (process?.env?.NEXT_PUBLIC_AUTOSAVE ?? '1') !== '0';
+      const AUTOSAVE = (process?.env?.NEXT_PUBLIC_AUTOSAVE === '1');
       if (AUTOSAVE) {
-        const fingerprint = JSON.stringify({ i: lastInputs || {}, k: lastKpis || {}, l: lastLevels || {}, a: lastRecommendations || {} });
-        if (fingerprint && fingerprint !== lastPersistFingerprint) {
+        const fingerprint = computeFingerprint(state);
+        if (fingerprint && fingerprint !== state.lastPersistFingerprint) {
           const hh = await getHouseholdIdClient();
           const payload: any = {
             householdId: hh,
-            inputs: lastInputs || {},
-            kpis: { ...(lastKpis || {}), engine_version: 'v2', gates: lastGates || {} },
-            levels: lastLevels || {},
-            recommendations: lastRecommendations || [],
+            inputs: state.lastInputs || {},
+            kpis: { ...(state.lastKpis || {}), engine_version: 'v2', gates: state.lastGates || {} },
+            levels: state.lastLevels || {},
+            recommendations: state.lastRecommendations || [],
             provisional_keys: [],
           };
           const res = await fetch('/api/prosper/snapshots', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
           });
           if (res.ok) {
-            lastPersistFingerprint = fingerprint;
+            state.lastPersistFingerprint = fingerprint;
             try { window.dispatchEvent(new CustomEvent('pp:snapshot_saved', { detail: { autosave: true } })); } catch {}
             try { addBreadcrumb && addBreadcrumb('Saving your details…'); } catch {}
           }
@@ -463,14 +471,15 @@ export const persist_snapshot = tool({
     required: [],
     additionalProperties: false,
   },
-  execute: async (input: any) => {
+  execute: async (input: any, details?: any) => {
+    const state = getSessionState(details);
     try {
       const hh = await getHouseholdIdClient();
       const payload: any = {
         household_id: hh,
-        inputs: lastInputs || {},
-        kpis: lastKpis || {},
-        levels: lastLevels || {},
+        inputs: state.lastInputs || {},
+        kpis: state.lastKpis || {},
+        levels: state.lastLevels || {},
         provisional_keys: [],
         ...(input?.extra || {}),
       };
@@ -508,7 +517,7 @@ export const store_user_profile = tool({
     required: ["updates"],
     additionalProperties: false,
   },
-  execute: async (input: any) => {
+  execute: async (input: any, _details?: any) => {
     try {
       const hh = await getHouseholdIdClient();
       const { email, full_name } = input.updates || {};
@@ -596,7 +605,7 @@ Global tool behaviour:
 - On error: apologise once, say what failed, offer next-best step or escalation (escalate_to_human).
 
 Flow:
-1) Greeting & consent: set educational boundary and ask if saving details as you go is OK.
+1) Greeting & simple consent: In your first message, open with a friendly boundary (educational only) and ask “Can I save your details to update your dashboard?”. Keep it short and natural. Respect "no" and keep the session private (do not call persist tools). Only persist after explicit consent.
 2) Discover context: household makeup, ages, location, goals (1–3), risk comfort; confirm joint vs individual.
 3) Money in: net monthly income per person; capture irregular income.
 4) Money out: essentials, lifestyle, debt outflows (min vs actual).
@@ -630,35 +639,39 @@ Update policy:
 - Prefer apply_delta_and_persist / apply_slot_deltas for real updates (they save and refresh the dashboard). Only use update_profile for temporary, in-session notes.
 `;
 
-export const realtimeOnlyAgent = new RealtimeAgent({
-  name: 'prosper_realtime',
-  voice: 'sage',
-  instructions: systemPrompt,
-  tools: [
-    // Thinker / orchestration
-    get_thinker_response,
-    // State + compute
-    rehydrate,
-    // Update profile values before computing
-    update_profile,
-    apply_delta_and_persist,
-    apply_slot_deltas,
-    compute_kpis,
-    assign_levels,
-    map_triggers,
-    build_action_plan,
-    retrieve_benchmarks,
-    // Persistence + actions
-    store_user_profile,
-    persist_snapshot,
-    complete_action,
-    // Utilities / stubs
-    send_summary,
-    schedule_checkin,
-    finish_session,
-    escalate_to_human,
-  ],
-});
+export function makeRealtimeAgent(voice: string) {
+  return new RealtimeAgent({
+    name: 'prosper_realtime',
+    voice,
+    instructions: systemPrompt,
+    tools: [
+      // Thinker / orchestration
+      get_thinker_response,
+      // State + compute
+      rehydrate,
+      // Update profile values before computing
+      update_profile,
+      apply_delta_and_persist,
+      apply_slot_deltas,
+      compute_kpis,
+      assign_levels,
+      map_triggers,
+      build_action_plan,
+      retrieve_benchmarks,
+      // Persistence + actions
+      store_user_profile,
+      persist_snapshot,
+      complete_action,
+      // Utilities / stubs
+      send_summary,
+      schedule_checkin,
+      finish_session,
+      escalate_to_human,
+    ],
+  });
+}
+
+export const realtimeOnlyAgent = makeRealtimeAgent('sage');
 
 export const realtimeOnlyScenario = [realtimeOnlyAgent];
 export const realtimeOnlyCompanyName = 'Prosper Path';

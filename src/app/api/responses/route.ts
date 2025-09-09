@@ -1,48 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { z, parseJson } from "@/app/api/_lib/validation";
+import { rateLimit } from "@/app/api/_lib/rateLimit";
 
-// Proxy endpoint for the OpenAI Responses API
+// Hardened proxy for a very specific internal use (guardrails classifier)
+const ALLOWED_MODELS = [
+  'gpt-4o-mini',
+  'gpt-4.1-mini',
+];
+
+const MAX_MESSAGES = 8;
+const MAX_CHARS_PER_MESSAGE = 2000;
+
+const MessageSchema = z.object({
+  role: z.enum(['user']).default('user'),
+  content: z.string().min(1).max(MAX_CHARS_PER_MESSAGE),
+});
+
+const TextFormatSchema = z.object({
+  type: z.string().optional(),
+}).passthrough().optional();
+
+const RequestSchema = z.object({
+  model: z.string(),
+  input: z.array(MessageSchema).min(1).max(MAX_MESSAGES),
+  text: z.object({ format: TextFormatSchema }).partial().optional(),
+}).strict();
+
 export async function POST(req: NextRequest) {
-  const schema = z.any();
-  const parsed = await parseJson(req, schema);
+  // Rate limit calls to avoid abuse
+  const rl = await rateLimit(req, 'responses_proxy', { limit: 10, windowMs: 60_000 });
+  if (!rl.ok) return rl.res;
+
+  const parsed = await parseJson(req, RequestSchema);
   if (!parsed.ok) return parsed.res;
-  const body = parsed.data;
+  const body = parsed.data as z.infer<typeof RequestSchema>;
+
+  // Enforce model allow-list
+  const model = body.model;
+  if (!ALLOWED_MODELS.includes(model)) {
+    return NextResponse.json({ error: 'model_not_allowed' }, { status: 400 });
+  }
+
+  // Make a minimal, sanitized payload for the Responses API
+  const sanitizedInput = body.input.map(m => ({ role: 'user', content: String(m.content).slice(0, MAX_CHARS_PER_MESSAGE) }));
+  const payload: any = { model, input: sanitizedInput, stream: false };
+  if (body.text?.format) payload.text = { format: body.text.format };
 
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  if (body.text?.format?.type === 'json_schema') {
-    return await structuredResponse(openai, body);
-  } else {
-    return await textResponse(openai, body);
-  }
-}
-
-async function structuredResponse(openai: OpenAI, body: any) {
   try {
-    const response = await openai.responses.parse({
-      ...(body as any),
-      stream: false,
-    });
-
+    // If structured output was requested via json_schema type, use parse()
+    const isStructured = body.text?.format && (body.text.format as any).type === 'json_schema';
+    const response = isStructured
+      ? await openai.responses.parse(payload)
+      : await openai.responses.create(payload);
     return NextResponse.json(response);
   } catch (err: any) {
     console.error('responses proxy error', err);
-    return NextResponse.json({ error: 'failed' }, { status: 500 }); 
-  }
-}
-
-async function textResponse(openai: OpenAI, body: any) {
-  try {
-    const response = await openai.responses.create({
-      ...(body as any),
-      stream: false,
-    });
-
-    return NextResponse.json(response);
-  } catch (err: any) {
-    console.error('responses proxy error', err);
-    return NextResponse.json({ error: 'failed' }, { status: 500 });
+    const status = (err?.status as number) || 500;
+    return NextResponse.json({ error: 'failed', detail: err?.message || 'proxy_error' }, { status });
   }
 }
   

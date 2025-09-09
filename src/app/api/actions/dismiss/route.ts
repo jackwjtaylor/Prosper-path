@@ -1,26 +1,21 @@
-import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import supabase from "@/app/lib/supabaseServer";
-import { z, parseJson } from "@/app/api/_lib/validation";
+import { withHouseholdAccess, z } from "@/app/api/_lib/withApi";
 
-export async function POST(req: NextRequest) {
-  try {
-    const schema = z.object({
-      householdId: z.string().uuid().optional(),
-      title: z.string().min(1).max(300).optional(),
-      action_id: z.string().min(1).max(200).optional(),
-      notes: z.string().max(2000).optional(),
-    });
-    const parsed = await parseJson(req, schema);
-    if (!parsed.ok) return parsed.res;
-    const body = parsed.data as z.infer<typeof schema>;
-    const cookieStore = await cookies();
-    const cookieId = cookieStore.get("pp_household_id")?.value;
-    const householdId: string | undefined = body?.householdId || cookieId;
-    const title: string | undefined = body?.title;
-    const action_id: string | undefined = body?.action_id;
-    const notes: string | undefined = body?.notes;
-    if (!householdId) return NextResponse.json({ error: 'household_id_required' }, { status: 400 });
+const bodySchema = z.object({
+  householdId: z.string().uuid().optional(),
+  title: z.string().min(1).max(300).optional(),
+  action_id: z.string().min(1).max(200).optional(),
+  notes: z.string().max(2000).optional(),
+});
+
+export const POST = withHouseholdAccess<z.infer<typeof bodySchema>>(
+  bodySchema,
+  'json',
+  async ({ data, householdId }) => {
+    const title = data?.title;
+    const action_id = data?.action_id;
+    const notes = data?.notes;
     if (!title && !action_id) return NextResponse.json({ error: 'title_or_action_id_required' }, { status: 400 });
 
     const row: any = {
@@ -31,14 +26,13 @@ export async function POST(req: NextRequest) {
       notes: notes?.toString().slice(0, 2000) || null,
     };
 
-    const { data, error } = await supabase
+    const { data: inserted, error } = await supabase
       .from('actions')
       .insert(row)
       .select('id')
       .single();
     if (error) return NextResponse.json({ error: 'insert_failed', detail: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true, id: data?.id });
-  } catch (e: any) {
-    return NextResponse.json({ error: 'bad_request', detail: e?.message || 'failed' }, { status: 400 });
-  }
-}
+    return NextResponse.json({ ok: true, id: inserted?.id });
+  },
+  { rateLimit: { bucket: 'actions_write', limit: 30, windowMs: 60_000, addHouseholdToKey: true }, sameOrigin: true }
+);

@@ -1,14 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import supabase from "@/app/lib/supabaseServer";
 import type { Slots } from "@/app/lib/schema/slots";
-import { computeKpisV2 } from "@/app/lib/kpiEngine";
-import { assignLevelsV2 } from "@/app/lib/levelEngine";
-// Unify to v2 action generator with stable action_ids
-import { generateTwoBestActions } from "@/app/lib/recommendationsV2";
-import { assertHouseholdAccess } from "@/app/lib/auth";
-import { z, parseJson } from "@/app/api/_lib/validation";
-import { rateLimit } from "@/app/api/_lib/rateLimit";
+import { updateSnapshotMerge, enforceMeteredPaywall } from "@/app/lib/snapshotService";
+import { withHouseholdAccess, z } from "@/app/api/_lib/withApi";
+import { parseBirthYear, parseBoolean, parseIntegerFromText, parsePercentFraction } from "@/app/lib/finance/normalize";
 
 type SlotDelta = { value: any; confidence?: 'low'|'med'|'high' };
 
@@ -76,61 +71,10 @@ function canonicalSlotKey(k: string): string {
 
 function coerceSlotValue(slot: string, raw: any): any {
   const k = slot;
-  // Birth year: accept YYYY or full dates
-  if (k === 'birth_year') {
-    if (typeof raw === 'string') {
-      const m = raw.match(/(19\d{2}|20\d{2})/);
-      if (m) return Number(m[1]);
-    }
-    const n = Number(raw);
-    if (Number.isFinite(n)) return n;
-    return null;
-  }
-  // Booleans
-  if (k === 'home_insured_ok' || k === 'income_protection_has' || k === 'partner' || k === 'homeowner') {
-    if (typeof raw === 'boolean') return raw;
-    const s = String(raw ?? '').toLowerCase();
-    if (['yes','true','y','1'].includes(s)) return true;
-    if (['no','false','n','0'].includes(s)) return false;
-    return null;
-  }
-  // Percent as 0..1
-  if (k === 'pension_contrib_pct') {
-    if (typeof raw === 'number') return raw > 1 ? raw / 100 : raw;
-    const s = String(raw ?? '').trim();
-    if (s.endsWith('%')) {
-      const n = Number(s.slice(0, -1));
-      return Number.isFinite(n) ? (n > 1 ? n / 100 : n) : null;
-    }
-    const n = Number(s);
-    return Number.isFinite(n) ? (n > 1 ? n / 100 : n) : null;
-  }
-  // Sick pay months (full/half) and dependants count: coerce numeric from text
-  if (k === 'sick_pay_months_full' || k === 'sick_pay_months_half' || k === 'dependants_count') {
-    if (typeof raw === 'number') return Math.max(0, Math.floor(raw));
-    const m = String(raw ?? '').match(/\d+/);
-    if (m) return Math.max(0, parseInt(m[0], 10));
-    return null;
-  }
-  // Age -> birth_year
-  if (k === 'birth_year') {
-    const nowYear = new Date().getFullYear();
-    if (typeof raw === 'number') {
-      if (raw <= 150) return nowYear - Math.max(0, Math.floor(raw)); // treat as age
-      if (raw >= 1900 && raw <= 2100) return Math.floor(raw);
-    }
-    if (typeof raw === 'string') {
-      // Accept simple age or a full date string containing YYYY
-      const ageMatch = raw.trim().match(/^(\d{1,3})\s*(years?|yrs?)?/i);
-      if (ageMatch) {
-        const age = parseInt(ageMatch[1], 10);
-        if (Number.isFinite(age)) return nowYear - Math.max(0, Math.floor(age));
-      }
-      const yMatch = raw.match(/(19\d{2}|20\d{2})/);
-      if (yMatch) return parseInt(yMatch[1], 10);
-    }
-    return null;
-  }
+  if (k === 'birth_year') return parseBirthYear(raw);
+  if (k === 'home_insured_ok' || k === 'income_protection_has' || k === 'partner' || k === 'homeowner') return parseBoolean(raw);
+  if (k === 'pension_contrib_pct') return parsePercentFraction(raw);
+  if (k === 'sick_pay_months_full' || k === 'sick_pay_months_half' || k === 'dependants_count') return parseIntegerFromText(raw);
   return raw;
 }
 
@@ -147,83 +91,23 @@ const BodySchema = z.object({
     .optional(),
 });
 
-export async function POST(req: NextRequest) {
-  try {
-    const parsed = await parseJson(req, BodySchema);
-    if (!parsed.ok) return parsed.res;
-    const body = parsed.data as z.infer<typeof BodySchema>;
-    const cookieStore = await cookies();
-    const cookieId = cookieStore.get('pp_household_id')?.value;
-    const householdId: string | undefined = body.householdId || cookieId;
-    if (!householdId) return NextResponse.json({ error: 'household_id_required' }, { status: 400 });
-
-    // Rate limit snapshot creation per IP+household
-    const rl = await rateLimit(req, 'snapshot', { limit: 20, windowMs: 60_000, keyParts: [householdId] });
-    if (!rl.ok) return rl.res;
-
-    const authz = await assertHouseholdAccess(req, householdId);
-    if (!authz.ok) return NextResponse.json({ error: 'unauthorized' }, { status: authz.code });
-
-    // Enforce free-limit for free/anonymous users
+export const POST = withHouseholdAccess<z.infer<typeof BodySchema>>(
+  BodySchema,
+  'json',
+  async ({ req, data, householdId, user }) => {
+    // Enforce free-limit via shared service
     try {
-      // Determine entitlements
-      const { data: hh } = await supabase
-        .from('households')
-        .select('subscription_status,current_period_end,email')
-        .eq('id', householdId)
-        .maybeSingle();
-      const sub = hh?.subscription_status || null;
-      const periodEnd = hh?.current_period_end ? Date.parse(hh.current_period_end) : 0;
-      const now = Date.now();
-      const premium = !!sub && ['active','trialing','past_due'].includes(sub) && (periodEnd === 0 || periodEnd > now);
-      if (!premium) {
-        const { count } = await supabase
-          .from('snapshots')
-          .select('id', { count: 'exact', head: true })
-          .eq('household_id', householdId);
-        const used = count ?? 0;
-        const freeLimit = Number(process.env.FREE_SNAPSHOT_LIMIT || 3);
-        if (used >= freeLimit) {
-          // If authenticated, offer checkout URL; otherwise instruct to sign in
-          const isAuthed = !!authz.user;
-          let url: string | undefined;
-          if (isAuthed) {
-            try {
-              const origin = new URL(req.url).origin;
-              const r = await fetch(`${origin}/api/billing/create-checkout-session`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ householdId, email: hh?.email })
-              });
-              const j = await r.json();
-              url = j?.url;
-            } catch {}
-          }
-          return NextResponse.json({ error: 'free_limit_exceeded', upgrade_url: url, login_url: '/login' }, { status: 402 });
-        }
-      }
+      const origin = new URL(req.url).origin;
+      const { data: hh } = await supabase.from('households').select('email').eq('id', householdId as string).maybeSingle();
+      const check = await enforceMeteredPaywall(householdId as string, { origin, email: (hh as any)?.email, isAuthed: !!user });
+      if (!check.ok) return NextResponse.json({ error: 'free_limit_exceeded', upgrade_url: (check as any).upgrade_url, login_url: (check as any).login_url }, { status: 402 });
     } catch {}
-
-    // Ensure household exists (FK)
-    try {
-      const { data: hh, error: hhErr } = await supabase
-        .from('households')
-        .select('id')
-        .eq('id', householdId)
-        .maybeSingle();
-      if (hhErr) throw hhErr;
-      if (!hh) {
-        const { error: insErr } = await supabase.from('households').insert({ id: householdId });
-        if (insErr) throw insErr;
-      }
-    } catch (e: any) {
-      return NextResponse.json({ error: 'household_insert_failed', detail: e?.message || 'failed' }, { status: 500 });
-    }
 
     // Load latest inputs
     const { data: snaps } = await supabase
       .from('snapshots')
       .select('id, created_at, inputs')
-      .eq('household_id', householdId)
+      .eq('household_id', householdId as string)
       .order('created_at', { ascending: false })
       .limit(1);
     const latest = snaps?.[0] || null;
@@ -231,58 +115,22 @@ export async function POST(req: NextRequest) {
     const existingSlots = (existingInputs?.slots as Slots | undefined) || ({} as any);
 
     // Merge incoming
-    const incomingInputs = (body.inputs && typeof body.inputs === 'object') ? body.inputs : {};
-    const rawSlots = (body.slots && typeof body.slots === 'object') ? (body.slots as Record<string, SlotDelta>) : {};
+    const incomingInputs = (data.inputs && typeof data.inputs === 'object') ? data.inputs : {};
+    const rawSlots = (data.slots && typeof data.slots === 'object') ? (data.slots as Record<string, SlotDelta>) : {};
     const incomingSlotsRaw: Record<string, SlotDelta> = {};
     for (const [key, v] of Object.entries(rawSlots)) {
       incomingSlotsRaw[canonicalSlotKey(key)] = v as SlotDelta;
     }
 
-    const mergedSlots: any = { ...existingSlots };
+    const mergedSlots: any = {};
     for (const [k, v] of Object.entries(incomingSlotsRaw)) {
       const valRaw = (v as any)?.value;
       const val = coerceSlotValue(k, valRaw);
       const conf = (v as any)?.confidence ?? 'med';
       mergedSlots[k] = { value: val, confidence: conf };
     }
-    const mergedInputs = { ...existingInputs, ...incomingInputs, slots: mergedSlots };
-
-    // Compute
-    const { kpis, gates, normalized } = computeKpisV2(mergedSlots as Slots);
-    const levels = assignLevelsV2(kpis, gates);
-    const recommendations = generateTwoBestActions(kpis as any, gates as any);
-
-    // Persist snapshot
-    const { data: snap, error: snapErr } = await supabase
-      .from('snapshots')
-      .insert({
-        household_id: householdId,
-        inputs: mergedInputs,
-        kpis: { ...kpis, engine_version: 'v2', gates },
-        levels,
-        recommendations,
-        provisional_keys: [],
-      })
-      .select('id, created_at')
-      .single();
-    if (snapErr) return NextResponse.json({ error: 'snapshot_insert_failed', detail: snapErr.message }, { status: 500 });
-
-    // Net worth point
-    const nw = normalized?.net_worth;
-    if (typeof nw === 'number' && Number.isFinite(nw)) {
-      try { await supabase.from('net_worth_points').insert({ household_id: householdId, ts: new Date().toISOString(), value: nw }); } catch {}
-    }
-
-    const snapshot = {
-      id: snap?.id,
-      created_at: snap?.created_at,
-      inputs: mergedInputs,
-      kpis: { ...kpis, engine_version: 'v2', gates },
-      levels,
-      recommendations,
-    };
+    const snapshot = await updateSnapshotMerge(householdId as string, incomingInputs, mergedSlots);
     return NextResponse.json({ ok: true, snapshot });
-  } catch (e: any) {
-    return NextResponse.json({ error: 'bad_request', detail: e?.message || 'failed' }, { status: 400 });
-  }
-}
+  },
+  { rateLimit: { bucket: 'snapshot', limit: 20, windowMs: 60_000, addHouseholdToKey: true }, sameOrigin: true }
+);

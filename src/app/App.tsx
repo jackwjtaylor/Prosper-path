@@ -8,6 +8,7 @@ import Link from "next/link";
 import Transcript from "./components/Transcript";
 import Dashboard from "./components/Dashboard";
 import LeftPaneControls from "./components/LeftPaneControls";
+import ChatPanel from "./components/ChatPanel";
 
 import { SessionStatus } from "@/app/types";
 import type { RealtimeAgent } from "@openai/agents/realtime";
@@ -18,12 +19,14 @@ import { useRealtimeSession } from "./hooks/useRealtimeSession";
 import { createModerationGuardrail } from "@/app/agentConfigs/guardrails";
 
 import { allAgentSets, defaultAgentSetKey } from "@/app/agentConfigs";
-import { realtimeOnlyCompanyName } from "@/app/agentConfigs/realtimeOnly";
+import { realtimeOnlyCompanyName, makeRealtimeAgent } from "@/app/agentConfigs/realtimeOnly";
 
 import useAudioDownload from "./hooks/useAudioDownload";
 import { useHandleSessionHistory } from "./hooks/useHandleSessionHistory";
 import { ensureHouseholdId } from "@/app/lib/householdLocal";
 import { getSupabaseClient } from "@/app/lib/supabaseClient";
+import { useAppStore } from "@/app/state/store";
+import { hapticToggle } from "@/app/lib/haptics";
 
 const sdkScenarioMap: Record<string, RealtimeAgent[]> = allAgentSets;
 
@@ -34,7 +37,21 @@ function App() {
   const { addTranscriptMessage, addTranscriptBreadcrumb } = useTranscript();
   const { logClientEvent, logServerEvent } = useEvent();
 
-  const [selectedAgentName, setSelectedAgentName] = useState<string>("");
+  // Global app state (Zustand)
+  const selectedAgentName = useAppStore(s => s.selectedAgentName);
+  const setSelectedAgentName = useAppStore(s => s.setSelectedAgentName);
+  const sessionStatus = useAppStore(s => s.sessionStatus);
+  const setSessionStatus = useAppStore(s => s.setSessionStatus);
+  const isPTTActive = useAppStore(s => s.isPTTActive);
+  const setIsPTTActive = useAppStore(s => s.setIsPTTActive);
+  const isPTTUserSpeaking = useAppStore(s => s.isPTTUserSpeaking);
+  const setIsPTTUserSpeaking = useAppStore(s => s.setIsPTTUserSpeaking);
+  const isAudioPlaybackEnabled = useAppStore(s => s.isAudioPlaybackEnabled);
+  const setIsAudioPlaybackEnabled = useAppStore(s => s.setIsAudioPlaybackEnabled);
+  const selectedVoice = useAppStore(s => s.voice);
+  const isMicMuted = useAppStore(s => s.isMicMuted);
+  const setIsMicMuted = useAppStore(s => s.setIsMicMuted);
+
   const [selectedAgentConfigSet, setSelectedAgentConfigSet] = useState<RealtimeAgent[] | null>(null);
 
   const [householdId, setHouseholdId] = useState<string>("");
@@ -91,7 +108,7 @@ function App() {
   }, [householdId]);
 
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
-  const handoffTriggeredRef = useRef(false);
+  const [handoffTriggered, setHandoffTriggered] = useState<boolean>(false);
 
   const sdkAudioElement = React.useMemo(() => {
     if (typeof window === 'undefined') return undefined;
@@ -111,23 +128,11 @@ function App() {
   const { connect, disconnect, sendUserText, sendEvent, interrupt, mute } = useRealtimeSession({
     onConnectionChange: (s) => setSessionStatus(s as SessionStatus),
     onAgentHandoff: (agentName: string) => {
-      handoffTriggeredRef.current = true;
+      setHandoffTriggered(true);
       setSelectedAgentName(agentName);
     },
   });
-
-  const [sessionStatus, setSessionStatus] = useState<SessionStatus>("DISCONNECTED");
   const [userText, setUserText] = useState<string>("");
-  const [isPTTActive, setIsPTTActive] = useState<boolean>(false);
-  const [isPTTUserSpeaking, setIsPTTUserSpeaking] = useState<boolean>(false);
-  const [isAudioPlaybackEnabled, setIsAudioPlaybackEnabled] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    const stored = localStorage.getItem('audioPlaybackEnabled');
-    return stored ? stored === 'true' : true;
-  });
-  const [hasAccepted, setHasAccepted] = useState<boolean>(() => {
-    try { return localStorage.getItem('pp_terms_v1_accepted') === '1'; } catch { return false; }
-  });
 
   const { startRecording, stopRecording } = useAudioDownload();
 
@@ -158,10 +163,11 @@ function App() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (selectedAgentName && sessionStatus === "DISCONNECTED" && hasAccepted) {
+    // Auto-connect when an agent is selected; consent now handled in-greeting
+    if (selectedAgentName && sessionStatus === "DISCONNECTED") {
       connectToRealtime();
     }
-  }, [selectedAgentName, hasAccepted]);
+  }, [selectedAgentName]);
 
   useEffect(() => {
     if (sessionStatus === "CONNECTED" && selectedAgentConfigSet && selectedAgentName) {
@@ -181,13 +187,13 @@ function App() {
           } catch {
             sendSimulatedUserMessage('ACTION=RECAP; RETURNING_USER=TRUE; DO_NOT_REASK_BASICS=TRUE');
           }
-        } else if (!handoffTriggeredRef.current) {
+        } else if (!handoffTriggered) {
           sendSimulatedUserMessage('hi');
         }
-        handoffTriggeredRef.current = false;
+        setHandoffTriggered(false);
       })();
     }
-  }, [selectedAgentConfigSet, selectedAgentName, sessionStatus, isReturningUser, householdId]);
+  }, [selectedAgentConfigSet, selectedAgentName, sessionStatus, isReturningUser, householdId, handoffTriggered]);
 
   // Post-checkout confirmation: if we have session_id, confirm and refresh entitlements
   useEffect(() => {
@@ -216,7 +222,7 @@ function App() {
     if (sessionStatus === "CONNECTED") {
       updateSession();
     }
-  }, [isPTTActive]);
+  }, [isPTTActive, isMicMuted]);
 
   const fetchEphemeralKey = async (): Promise<{ key: string; model?: string } | null> => {
     logClientEvent({ url: "/session" }, "fetch_session_token_request");
@@ -247,16 +253,21 @@ function App() {
           const [agent] = reorderedAgents.splice(idx, 1);
           reorderedAgents.unshift(agent);
         }
+        // Apply selected voice to the root agent by constructing a fresh instance
+        const agentsToUse: RealtimeAgent[] = reorderedAgents.map((a, i) => {
+          if (i === 0) return makeRealtimeAgent(selectedVoice || 'sage');
+          return a;
+        });
 
         const companyName = realtimeOnlyCompanyName;
         const guardrail = createModerationGuardrail(companyName);
 
         await connect({
           getEphemeralKey: async () => EK,
-          initialAgents: reorderedAgents,
+          initialAgents: agentsToUse,
           audioElement: sdkAudioElement,
           outputGuardrails: [guardrail],
-          extraContext: { addTranscriptBreadcrumb },
+          extraContext: { addTranscriptBreadcrumb, sessionState: {} },
         });
       } catch (err) {
         console.error("Error connecting via SDK:", err);
@@ -283,9 +294,9 @@ function App() {
   };
 
   const updateSession = () => {
-    const turnDetection = isPTTActive
-      ? null
-      : { type: 'server_vad', threshold: 0.9, prefix_padding_ms: 300, silence_duration_ms: 500, create_response: true };
+    const turnDetection = (!isPTTActive && !isMicMuted)
+      ? { type: 'server_vad', threshold: 0.9, prefix_padding_ms: 300, silence_duration_ms: 500, create_response: true }
+      : null;
 
     sendEvent({ type: 'session.update', session: { turn_detection: turnDetection } });
     // Initial message handled separately based on isReturningUser
@@ -318,11 +329,6 @@ function App() {
   };
 
   const onToggleConnection = () => {
-    if (!hasAccepted) {
-      // Block connecting until terms are accepted
-      try { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); } catch {}
-      return;
-    }
     if (sessionStatus === "CONNECTED" || sessionStatus === "CONNECTING") {
       disconnectFromRealtime();
       setSessionStatus("DISCONNECTED");
@@ -331,15 +337,7 @@ function App() {
     }
   };
 
-  // Persist UI toggles
-  useEffect(() => {
-    const storedPTT = localStorage.getItem("pushToTalkUI");
-    if (storedPTT) setIsPTTActive(storedPTT === "true");
-    const storedAudioPlaybackEnabled = localStorage.getItem("audioPlaybackEnabled");
-    if (storedAudioPlaybackEnabled) setIsAudioPlaybackEnabled(storedAudioPlaybackEnabled === "true");
-  }, []);
-  useEffect(() => { localStorage.setItem("pushToTalkUI", isPTTActive.toString()); }, [isPTTActive]);
-  useEffect(() => { localStorage.setItem("audioPlaybackEnabled", isAudioPlaybackEnabled.toString()); }, [isAudioPlaybackEnabled]);
+  // UI toggles now persisted via Zustand store (no extra effects needed)
 
   // Audio playback & recording
   useEffect(() => {
@@ -395,7 +393,7 @@ function App() {
       {/* Header */}
       <div className="p-5 text-lg font-semibold flex justify-between items-center max-w-7xl mx-auto w-full relative">
         <Link href="/home" className="flex items-center">
-          <Image src="2D76K394f.eps.svg" alt="Prosper Logo" width={20} height={20} className="mr-2" />
+          <Image src="2D76K394.eps.svg" alt="Prosper Logo" width={20} height={20} className="mr-2" />
           <span>Prosper AI <span className="text-gray-400">your personal wealth coach</span></span>
         </Link>
         <nav className="hidden md:flex items-center gap-6 text-sm">
@@ -414,26 +412,13 @@ function App() {
       <div className="flex-1 w-full min-h-0">
         <div className="max-w-7xl mx-auto px-2 h-full min-h-0 pb-16 lg:pb-0">
           <div className="hidden lg:grid grid-cols-1 lg:grid-cols-[520px_1fr] gap-4 h-full min-h-0">
-            {/* Left column */}
-            <div className="min-w-0 flex flex-col gap-3 h-full min-h-0">
-              <LeftPaneControls
-                sessionStatus={sessionStatus}
-                onToggleConnection={onToggleConnection}
-                isPTTActive={isPTTActive}
-                setIsPTTActive={setIsPTTActive}
-                isPTTUserSpeaking={isPTTUserSpeaking}
-                handleTalkButtonDown={handleTalkButtonDown}
-                handleTalkButtonUp={handleTalkButtonUp}
-                isAudioPlaybackEnabled={isAudioPlaybackEnabled}
-                setIsAudioPlaybackEnabled={setIsAudioPlaybackEnabled}
-              />
-              <Transcript
-                userText={userText}
-                setUserText={setUserText}
-                onSendMessage={handleSendTextMessage}
-                canSend={sessionStatus === "CONNECTED" && hasAccepted}
-              />
-            </div>
+            {/* Left column: Integrated Chat Panel */}
+            <ChatPanel
+              userText={userText}
+              setUserText={setUserText}
+              onSendMessage={handleSendTextMessage}
+              onToggleConnection={onToggleConnection}
+            />
 
             {/* Right column: Dashboard (unchanged component) */}
             <Dashboard />
@@ -442,44 +427,50 @@ function App() {
           {/* Mobile: single view with tabs */}
           <div className="block lg:hidden h-full min-h-0">
             {activeTab === 'chat' ? (
-              <div className="min-w-0 flex flex-col gap-3 h-full min-h-0">
-                <LeftPaneControls
-                  sessionStatus={sessionStatus}
-                  onToggleConnection={onToggleConnection}
-                  isPTTActive={isPTTActive}
-                  setIsPTTActive={setIsPTTActive}
-                  isPTTUserSpeaking={isPTTUserSpeaking}
-                  handleTalkButtonDown={handleTalkButtonDown}
-                  handleTalkButtonUp={handleTalkButtonUp}
-                  isAudioPlaybackEnabled={isAudioPlaybackEnabled}
-                  setIsAudioPlaybackEnabled={setIsAudioPlaybackEnabled}
-                />
-                <Transcript
-                  userText={userText}
-                  setUserText={setUserText}
-                  onSendMessage={handleSendTextMessage}
-                  canSend={sessionStatus === "CONNECTED" && hasAccepted}
-                />
-              </div>
+              <ChatPanel
+                userText={userText}
+                setUserText={setUserText}
+                onSendMessage={handleSendTextMessage}
+                onToggleConnection={onToggleConnection}
+              />
             ) : (
               <Dashboard />
             )}
           </div>
         </div>
 
-        {/* Bottom mobile tab bar */}
+        {/* Bottom mobile voice-first nav */}
         <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-sm z-40">
-          <div className="max-w-7xl mx-auto px-2">
-            <div className="flex justify-around py-2">
+          <div className="max-w-7xl mx-auto px-3">
+            <div className="flex items-center justify-between py-2 gap-2">
               <button
-                className={`px-4 py-2 rounded-md text-sm ${activeTab === 'chat' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-800'}`}
+                className={`flex-1 px-3 py-2 rounded-md text-sm ${activeTab === 'chat' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-800'}`}
                 onClick={() => setActiveTab('chat')}
+                aria-label="Chat"
               >
                 Chat
               </button>
               <button
-                className={`px-4 py-2 rounded-md text-sm ${activeTab === 'dashboard' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-800'}`}
+                className={`shrink-0 h-12 w-12 rounded-full border shadow-sm ${
+                  isMicMuted ? 'bg-red-600 border-red-600 text-white' : 'bg-emerald-600 border-emerald-600 text-white'
+                }`}
+                onClick={() => { setIsMicMuted(!isMicMuted); hapticToggle(!isMicMuted); }}
+                disabled={sessionStatus !== 'CONNECTED'}
+                aria-pressed={!isMicMuted}
+                aria-label={isMicMuted ? 'Unmute microphone' : 'Mute microphone'}
+                title={sessionStatus !== 'CONNECTED' ? 'Connect to control mic' : (isMicMuted ? 'Unmute mic' : 'Mute mic')}
+              >
+                <span className="relative inline-flex items-center justify-center h-full w-full">
+                  {!isMicMuted && (
+                    <span className="animate-ping absolute inline-flex h-12 w-12 rounded-full bg-emerald-400 opacity-40"></span>
+                  )}
+                  <span className="relative">{isMicMuted ? 'Unmute' : 'Mute'}</span>
+                </span>
+              </button>
+              <button
+                className={`flex-1 px-3 py-2 rounded-md text-sm ${activeTab === 'dashboard' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-800'}`}
                 onClick={() => setActiveTab('dashboard')}
+                aria-label="Dashboard"
               >
                 Dashboard
               </button>
@@ -487,44 +478,7 @@ function App() {
           </div>
         </div>
       </div>
-      {/* Terms & Privacy consent bar */}
-      {!hasAccepted && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg border shadow-xl w-full max-w-lg p-5">
-            <div className="flex items-start gap-3">
-              <div className="h-6 w-6 rounded-full bg-yellow-100 border border-yellow-300 flex items-center justify-center shrink-0" aria-hidden="true">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 8v5" stroke="#a16207" strokeWidth="2"/><circle cx="12" cy="17" r="1" fill="#a16207"/></svg>
-              </div>
-              <div className="flex-1">
-                <div className="text-base font-semibold text-gray-900">Please accept our Terms to continue</div>
-                <div className="text-sm text-gray-700 mt-1">To use Prosper, you need to accept our Terms and Privacy Policy.</div>
-                <div className="text-sm text-gray-600 mt-2">
-                  By continuing you agree to our <a href="/terms" target="_blank" className="underline">Terms</a> and <a href="/privacy" target="_blank" className="underline">Privacy Policy</a>.
-                </div>
-                <div className="mt-3 flex items-center justify-end gap-2">
-                  <a className="px-3 py-1.5 rounded-md border bg-white hover:bg-gray-50 text-sm" href="/terms" target="_blank" rel="noreferrer">View Terms</a>
-                  <a className="px-3 py-1.5 rounded-md border bg-white hover:bg-gray-50 text-sm" href="/privacy" target="_blank" rel="noreferrer">View Privacy</a>
-                  <button
-                    type="button"
-                    className="px-3 py-1.5 rounded-md border bg-gray-900 text-white hover:bg-gray-800 text-sm"
-                    onClick={() => {
-                      try { localStorage.setItem('pp_terms_v1_accepted', '1'); } catch {}
-                      setHasAccepted(true);
-                      (async () => { try { const hh = await ensureHouseholdId(); await fetch('/api/legal/accept', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId: hh, terms_version: 'v1', privacy_version: 'v1' }) }); } catch {} })();
-                      // After accepting, auto-connect if agent is ready
-                      if (selectedAgentName && sessionStatus === 'DISCONNECTED') {
-                        try { connectToRealtime(); } catch {}
-                      }
-                    }}
-                  >
-                    I Agree
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Consent modal removed; greet-and-consent handled by agent */}
     </div>
   );
 }

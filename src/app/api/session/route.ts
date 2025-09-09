@@ -1,7 +1,30 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "../_lib/rateLimit";
 
-export async function GET() {
+function isSameOrigin(req: NextRequest): boolean {
   try {
+    const origin = req.headers.get("origin");
+    const referer = req.headers.get("referer");
+    const sfs = req.headers.get("sec-fetch-site");
+    const expected = new URL(req.url).origin;
+    if (sfs && sfs.toLowerCase() === "same-origin") return true;
+    if (origin && origin === expected) return true;
+    if (!origin && referer && referer.startsWith(expected)) return true;
+  } catch {}
+  return false;
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    // Enforce same-origin to reduce abuse from other sites
+    if (!isSameOrigin(req)) {
+      return NextResponse.json({ error: "forbidden_origin" }, { status: 403 });
+    }
+
+    // Small per-IP rate limit (prefer Upstash if configured, else in-memory)
+    const rl = await rateLimit(req, "session_ephemeral", { limit: 10, windowMs: 60_000 });
+    if (!rl.ok) return rl.res;
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(

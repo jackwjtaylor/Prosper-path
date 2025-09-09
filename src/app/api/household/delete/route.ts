@@ -1,19 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import supabase from "@/app/lib/supabaseServer";
-import { z, parseJson } from "@/app/api/_lib/validation";
-import { assertHouseholdAccess } from "@/app/lib/auth";
+import { withHouseholdAccess, z } from "@/app/api/_lib/withApi";
+import { cookies } from "next/headers";
 
 const BodySchema = z.object({ householdId: z.string().uuid() });
 
-export async function POST(req: NextRequest) {
-  try {
-    const parsed = await parseJson(req, BodySchema);
-    if (!parsed.ok) return parsed.res;
-    const { householdId } = parsed.data as z.infer<typeof BodySchema>;
-    const authz = await assertHouseholdAccess(req, householdId);
-    if (!authz.ok) return NextResponse.json({ error: 'unauthorized' }, { status: authz.code });
-
+export const POST = withHouseholdAccess<z.infer<typeof BodySchema>>(
+  BodySchema,
+  'json',
+  async ({ data, householdId }) => {
     // Delete dependent rows (best-effort order to avoid FK constraints if any)
     try { await supabase.from('net_worth_points').delete().eq('household_id', householdId); } catch {}
     try { await supabase.from('snapshots').delete().eq('household_id', householdId); } catch {}
@@ -27,8 +22,6 @@ export async function POST(req: NextRequest) {
       cookieStore.set({ name: 'pp_household_id', value: '', path: '/', maxAge: 0 });
     } catch {}
     return res;
-  } catch (e: any) {
-    return NextResponse.json({ error: 'bad_request', detail: e?.message || 'failed' }, { status: 400 });
-  }
-}
-
+  },
+  { sameOrigin: true, rateLimit: { bucket: 'household_delete', limit: 10, windowMs: 60_000, addHouseholdToKey: true } }
+);

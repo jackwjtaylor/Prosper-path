@@ -787,7 +787,9 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
 
   const markDone = async (title: string, action_id?: string) => {
     try {
-      await fetch('/api/actions/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId, title, action_id }) });
+      let headers: any = { 'Content-Type': 'application/json' };
+      try { const supa = getSupabaseClient(); if (supa) { const { data } = await supa.auth.getSession(); const token = data?.session?.access_token; if (token) headers.Authorization = `Bearer ${token}`; } } catch {}
+      await fetch('/api/actions/complete', { method: 'POST', headers, body: JSON.stringify({ householdId, title, action_id }) });
       // Optimistically update
       setCompletedTitles((prev) => Array.from(new Set([...prev, title.toLowerCase()])));
       if (action_id) setCompletedIds((prev) => Array.from(new Set([...prev, action_id])));
@@ -797,7 +799,9 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
 
   const dismiss = async (title: string, action_id?: string) => {
     try {
-      await fetch('/api/actions/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId, title, action_id }) });
+      let headers: any = { 'Content-Type': 'application/json' };
+      try { const supa = getSupabaseClient(); if (supa) { const { data } = await supa.auth.getSession(); const token = data?.session?.access_token; if (token) headers.Authorization = `Bearer ${token}`; } } catch {}
+      await fetch('/api/actions/dismiss', { method: 'POST', headers, body: JSON.stringify({ householdId, title, action_id }) });
       setDismissedTitles((prev) => Array.from(new Set([...prev, title.toLowerCase()])));
       if (action_id) setDismissedIds((prev) => Array.from(new Set([...prev, action_id])));
     } catch {}

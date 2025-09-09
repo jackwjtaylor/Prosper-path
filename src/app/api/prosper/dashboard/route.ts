@@ -1,45 +1,23 @@
-import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import supabase from "@/app/lib/supabaseServer";
-import { assertHouseholdAccess } from "@/app/lib/auth";
-import { z, parseQuery } from "@/app/api/_lib/validation";
-import { rateLimit } from "@/app/api/_lib/rateLimit";
+import { withHouseholdAccess, z } from "@/app/api/_lib/withApi";
 
-export async function GET(req: NextRequest) {
-  // Require household cookie; in the next step we will require an authenticated user and ownership check
-  const q = parseQuery(req, z.object({ householdId: z.string().uuid().optional() }));
-  if (!('ok' in q) || !q.ok) return q.res;
-  const qId = q.data.householdId;
-  const cookieStore = await cookies();
-  const cId = cookieStore.get("pp_household_id")?.value;
-  const householdId = qId || cId;
-
-  if (!householdId) {
-    return NextResponse.json({ error: "household_id_required" }, { status: 400 });
-  }
-
-  // Rate limit dashboard fetches per IP+household
-  const rl = await rateLimit(req, 'dashboard', { limit: 60, windowMs: 60_000, keyParts: [householdId] });
-  if (!rl.ok) return rl.res;
-
-  // AuthZ: user must own this household (or household has no user bound yet)
-  const authz = await assertHouseholdAccess(req, householdId);
-  if (!authz.ok) return NextResponse.json({ error: 'unauthorized' }, { status: authz.code });
-
-  // Latest snapshot
-  const { data: snaps, error: sErr } = await supabase
-    .from("snapshots")
-    .select("id, created_at, inputs, kpis, levels, recommendations, provisional_keys")
-    .eq("household_id", householdId)
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  if (sErr) {
-    console.error("snapshots query error", sErr);
-    return NextResponse.json({ error: "snapshot_query_failed" }, { status: 500 });
-  }
-
-  const latestSnapshot = snaps?.[0] || null;
+export const GET = withHouseholdAccess<{ householdId?: string }>(
+  z.object({ householdId: z.string().uuid().optional() }),
+  'query',
+  async ({ householdId }) => {
+    // Latest snapshot
+    const { data: snaps, error: sErr } = await supabase
+      .from("snapshots")
+      .select("id, created_at, inputs, kpis, levels, recommendations, provisional_keys")
+      .eq("household_id", householdId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (sErr) {
+      console.error("snapshots query error", sErr);
+      return NextResponse.json({ error: "snapshot_query_failed" }, { status: 500 });
+    }
+    const latestSnapshot = snaps?.[0] || null;
 
   // Household billing + identity state (optional – table may not have these columns yet)
   let subscription_status: string | null = null;
@@ -50,7 +28,7 @@ export async function GET(req: NextRequest) {
     const { data: hh } = await supabase
       .from('households')
       .select('subscription_status,current_period_end,email,full_name')
-      .eq('id', householdId)
+      .eq('id', householdId as string)
       .maybeSingle();
     subscription_status = (hh as any)?.subscription_status ?? null;
     current_period_end = (hh as any)?.current_period_end ?? null;
@@ -62,7 +40,7 @@ export async function GET(req: NextRequest) {
   const { data: series, error: nErr } = await supabase
     .from("net_worth_points")
     .select("ts, value")
-    .eq("household_id", householdId)
+    .eq("household_id", householdId as string)
     .order("ts", { ascending: true })
     .limit(180);
 
@@ -115,5 +93,7 @@ export async function GET(req: NextRequest) {
     payload.recommendations = latestSnapshot.recommendations;
   }
 
-  return NextResponse.json(payload, { status: 200 });
-}
+    return NextResponse.json(payload, { status: 200 });
+  },
+  { rateLimit: { bucket: 'dashboard', limit: 60, windowMs: 60_000, addHouseholdToKey: true }, sameOrigin: true }
+);

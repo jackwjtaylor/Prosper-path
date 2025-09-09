@@ -1,19 +1,12 @@
 "use client";
 import React from "react";
-import { SessionStatus } from "@/app/types";
+import { useAppStore } from "@/app/state/store";
+import { hapticToggle } from "@/app/lib/haptics";
 
 interface LeftPaneControlsProps {
-  sessionStatus: SessionStatus;
   onToggleConnection: () => void;
-
-  isPTTActive: boolean;
-  setIsPTTActive: (v: boolean) => void;
-  isPTTUserSpeaking: boolean;
   handleTalkButtonDown: () => void;
   handleTalkButtonUp: () => void;
-
-  isAudioPlaybackEnabled: boolean;
-  setIsAudioPlaybackEnabled: (v: boolean) => void;
 }
 
 /**
@@ -22,16 +15,15 @@ interface LeftPaneControlsProps {
  * - Keeps the dashboard untouched
  */
 export default function LeftPaneControls({
-  sessionStatus,
   onToggleConnection,
-  isPTTActive,
-  setIsPTTActive,
-  isPTTUserSpeaking,
   handleTalkButtonDown,
   handleTalkButtonUp,
-  isAudioPlaybackEnabled,
-  setIsAudioPlaybackEnabled,
 }: LeftPaneControlsProps) {
+  const sessionStatus = useAppStore(s => s.sessionStatus);
+  // PTT and audio playback controls are hidden in voice-first mode
+  const isMicMuted = useAppStore(s => s.isMicMuted);
+  const setIsMicMuted = useAppStore(s => s.setIsMicMuted);
+
   const isConnected = sessionStatus === "CONNECTED";
   const isConnecting = sessionStatus === "CONNECTING";
 
@@ -52,50 +44,37 @@ export default function LeftPaneControls({
             aria-pressed={isConnected}
           >
             {isConnected ? "Disconnect" : isConnecting ? "Connecting…" : "Connect"}
-          </button>
+        </button>
 
-          {/* PTT toggle + hold-to-talk */}
-          <label className="inline-flex items-center gap-2 text-sm select-none">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded"
-              checked={isPTTActive}
-              onChange={(e) => setIsPTTActive(e.target.checked)}
-              disabled={!isConnected}
-            />
-            <span>Push to talk</span>
-          </label>
+        {/* Voice selector removed for now */}
 
-          <button
-            type="button"
-            onMouseDown={handleTalkButtonDown}
-            onMouseUp={handleTalkButtonUp}
-            onTouchStart={handleTalkButtonDown}
-            onTouchEnd={handleTalkButtonUp}
-            disabled={!isConnected || !isPTTActive}
-            aria-label="Hold to talk"
-            className={`h-9 px-3 rounded-lg border text-sm transition-colors ${
-              !isConnected || !isPTTActive
-                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                : isPTTUserSpeaking
-                ? "bg-gray-200"
-                : "bg-white hover:bg-gray-50"
-            }`}
-          >
-            {isPTTUserSpeaking ? "Release to send" : "Talk"}
-          </button>
+        {/* Prominent Mic mute/unmute for always-listening */}
+        <button
+          type="button"
+          onClick={() => { setIsMicMuted(!isMicMuted); hapticToggle(!isMicMuted); }}
+          disabled={!isConnected}
+          aria-pressed={isMicMuted}
+          className={`h-9 px-4 rounded-lg text-sm font-medium border shadow-sm transition-colors ${
+            !isConnected
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : isMicMuted
+              ? 'bg-red-600 text-white border-red-600 hover:bg-red-700'
+              : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+          }`}
+          title={isMicMuted ? 'Unmute mic' : 'Mute mic'}
+        >
+          {isMicMuted ? 'Unmute' : 'Mute'}
+        </button>
 
-          {/* Audio playback */}
-          <label className="inline-flex items-center gap-2 text-sm select-none">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded"
-              checked={isAudioPlaybackEnabled}
-              onChange={(e) => setIsAudioPlaybackEnabled(e.target.checked)}
-              disabled={!isConnected}
-            />
-            <span>Audio playback</span>
-          </label>
+        {/* Mic state chip */}
+        <div className="inline-flex items-center gap-2 text-xs select-none px-2 py-1 rounded-full border bg-white">
+          <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${isMicMuted ? 'bg-red-600' : 'bg-emerald-500'}`}>
+            {!isMicMuted && (
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-50"></span>
+            )}
+          </span>
+          <span>{isMicMuted ? 'Muted' : 'Listening'}</span>
+        </div>
 
           <div className="ml-auto" />
         </div>

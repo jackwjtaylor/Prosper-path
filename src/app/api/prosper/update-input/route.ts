@@ -1,12 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import supabase from "@/app/lib/supabaseServer";
-import { computeKpisV2 } from "@/app/lib/kpiEngine";
-import { assignLevelsV2 } from "@/app/lib/levelEngine";
-import { generateTwoBestActions } from "@/app/lib/recommendationsV2";
-import { z, parseJson } from "@/app/api/_lib/validation";
-import { rateLimit } from "@/app/api/_lib/rateLimit";
-import { assertHouseholdAccess } from "@/app/lib/auth";
+import { updateSnapshotSingleSlot, enforceMeteredPaywall } from "@/app/lib/snapshotService";
+import { withHouseholdAccess, z } from "@/app/api/_lib/withApi";
+import { parseByKind } from "@/app/lib/finance/normalize";
 
 const BodySchema = z.object({
   householdId: z.string().uuid().optional(),
@@ -15,142 +11,27 @@ const BodySchema = z.object({
   kind: z.enum(['money','percent','number','bool','text']).optional(),
 });
 
-function parseValue(raw: any, kind?: string): any {
-  if (kind === 'bool') return raw === true || raw === 'true' || raw === 'yes' || raw === '1';
-  if (kind === 'text') return String(raw ?? '').trim();
-  let s = String(raw ?? '').trim();
-  if (kind === 'percent') {
-    // Accept "10%" or "0.10"
-    if (s.endsWith('%')) s = s.slice(0, -1);
-    const n = Number(s);
-    if (!Number.isFinite(n)) return null;
-    return n > 1 ? n / 100 : n;
-  }
-  // money/number: strip commas and currency symbols
-  s = s.replace(/[,\s]/g, '');
-  s = s.replace(/[^0-9.\-]/g, '');
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
+// Parsing moved to finance/normalize.ts
 
-export async function POST(req: NextRequest) {
-  try {
-    const parsed = await parseJson(req, BodySchema);
-    if (!parsed.ok) return parsed.res;
-    const body = parsed.data as z.infer<typeof BodySchema>;
-    const cookieStore = await cookies();
-    const cookieId = cookieStore.get('pp_household_id')?.value;
-    const householdId = body.householdId || cookieId;
-    if (!householdId) return NextResponse.json({ error: 'household_id_required' }, { status: 400 });
-
-    const rl = await rateLimit(req, 'snapshot', { limit: 20, windowMs: 60_000, keyParts: [householdId] });
-    if (!rl.ok) return rl.res;
-
-    // AuthZ: user must own this household (or be anonymous if unowned)
-    const authz = await assertHouseholdAccess(req, householdId);
-    if (!authz.ok) return NextResponse.json({ error: 'unauthorized' }, { status: authz.code });
-
+export const POST = withHouseholdAccess<z.infer<typeof BodySchema>>(
+  BodySchema,
+  'json',
+  async ({ req, data, householdId, user }) => {
     // Enforce free-limit (metered paywall) consistent with other write routes
     try {
-      const { data: hh } = await supabase
-        .from('households')
-        .select('subscription_status,current_period_end,email')
-        .eq('id', householdId)
-        .maybeSingle();
-      const sub = (hh as any)?.subscription_status || null;
-      const periodEnd = (hh as any)?.current_period_end ? Date.parse((hh as any).current_period_end) : 0;
-      const now = Date.now();
-      const premium = !!sub && ['active','trialing','past_due'].includes(sub) && (periodEnd === 0 || periodEnd > now);
-      if (!premium) {
-        const { count } = await supabase
-          .from('snapshots')
-          .select('id', { count: 'exact', head: true })
-          .eq('household_id', householdId);
-        const used = count ?? 0;
-        const freeLimit = Number(process.env.FREE_SNAPSHOT_LIMIT || 3);
-        if (used >= freeLimit) {
-          const isAuthed = !!authz.user;
-          let url: string | undefined;
-          if (isAuthed) {
-            try {
-              const origin = new URL(req.url).origin;
-              const r = await fetch(`${origin}/api/billing/create-checkout-session`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ householdId, email: (hh as any)?.email })
-              });
-              const j = await r.json();
-              url = j?.url;
-            } catch {}
-          }
-          return NextResponse.json({ error: 'free_limit_exceeded', upgrade_url: url, login_url: '/login' }, { status: 402 });
-        }
-      }
+      const origin = new URL(req.url).origin;
+      const { data: hh } = await supabase.from('households').select('email').eq('id', householdId as string).maybeSingle();
+      const check = await enforceMeteredPaywall(householdId as string, { origin, email: (hh as any)?.email, isAuthed: !!user });
+      if (!check.ok) return NextResponse.json({ error: 'free_limit_exceeded', upgrade_url: (check as any).upgrade_url, login_url: (check as any).login_url }, { status: 402 });
     } catch {}
 
-    // Ensure household row exists (FK on snapshots)
-    try {
-      const { data: hh, error: hhErr } = await supabase
-        .from('households')
-        .select('id')
-        .eq('id', householdId)
-        .maybeSingle();
-      if (hhErr) throw hhErr;
-      if (!hh) {
-        const { error: insErr } = await supabase.from('households').insert({ id: householdId });
-        if (insErr) throw insErr;
-      }
-    } catch (e) {
-      return NextResponse.json({ error: 'household_insert_failed', detail: (e as any)?.message || 'failed' }, { status: 500 });
-    }
-
-    const key = body.key;
+    const key = data.key;
     if (!key) return NextResponse.json({ error: 'key_required' }, { status: 400 });
-    const val = parseValue(body.value, body.kind);
-    if (val == null && body.kind !== 'text') return NextResponse.json({ error: 'invalid_value' }, { status: 400 });
+    const val = parseByKind(data.kind || 'number', data.value);
+    if (val == null && data.kind !== 'text') return NextResponse.json({ error: 'invalid_value' }, { status: 400 });
 
-    // Load latest snapshot to merge existing inputs/slots
-    const { data: snaps } = await supabase
-      .from('snapshots')
-      .select('id, created_at, inputs')
-      .eq('household_id', householdId)
-      .order('created_at', { ascending: false })
-      .limit(1);
-    const latest = snaps?.[0] || null;
-    const inputs = (latest?.inputs as any) || {};
-    const slots = (inputs?.slots as any) || {};
-    slots[key] = { value: val, confidence: 'high' };
-    const mergedInputs = { ...inputs, slots };
-
-    // Compute v2 KPIs and levels
-    const { kpis, gates, normalized } = computeKpisV2(slots as any);
-    const levels = assignLevelsV2(kpis, gates);
-    const recommendations = generateTwoBestActions(kpis as any, gates as any);
-
-    // Persist new snapshot
-    const { data: snap, error: snapErr } = await supabase
-      .from('snapshots')
-      .insert({
-        household_id: householdId,
-        inputs: mergedInputs,
-        kpis: { ...kpis, engine_version: 'v2', gates },
-        levels,
-        recommendations,
-        provisional_keys: [],
-      })
-      .select('id, created_at')
-      .single();
-    if (snapErr) return NextResponse.json({ error: 'snapshot_insert_failed', detail: snapErr.message }, { status: 500 });
-
-    // Persist net worth point for the chart if available
-    const nw = normalized.net_worth;
-    if (typeof nw === 'number' && Number.isFinite(nw)) {
-      try {
-        await supabase.from('net_worth_points').insert({ household_id: householdId, ts: new Date().toISOString(), value: nw });
-      } catch {}
-    }
-
-    return NextResponse.json({ ok: true, id: snap?.id, created_at: snap?.created_at, kpis, gates, levels, recommendations });
-  } catch (e: any) {
-    return NextResponse.json({ error: 'bad_request', detail: e?.message || 'failed' }, { status: 400 });
-  }
-}
+    const snapshot = await updateSnapshotSingleSlot(householdId as string, key, val, 'high');
+    return NextResponse.json({ ok: true, id: snapshot.id, created_at: snapshot.created_at, kpis: snapshot.kpis, gates: (snapshot.kpis as any)?.gates, levels: snapshot.levels, recommendations: snapshot.recommendations });
+  },
+  { rateLimit: { bucket: 'snapshot', limit: 20, windowMs: 60_000, addHouseholdToKey: true }, sameOrigin: true }
+);
