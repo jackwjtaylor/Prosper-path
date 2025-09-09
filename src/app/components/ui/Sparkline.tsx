@@ -3,7 +3,7 @@ import React from "react";
 
 export type SparkPoint = { ts?: string; value: number };
 
-export default function Sparkline({ points }: { points: SparkPoint[] }) {
+export default function Sparkline({ points, size = 'md' }: { points: SparkPoint[]; size?: 'sm' | 'md' }) {
   const w = 600;
   const h = 120;
   const { d, areaD } = React.useMemo(() => {
@@ -31,7 +31,13 @@ export default function Sparkline({ points }: { points: SparkPoint[] }) {
   }
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-28 md:h-36" role="img" aria-label="Net worth trend" color="var(--brand)">
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      className={`w-full ${size === 'sm' ? 'h-12 md:h-16' : 'h-28 md:h-36'}`}
+      role="img"
+      aria-label="Net worth trend"
+      color="var(--brand)"
+    >
       <defs>
         <linearGradient id="slope" x1="0" x2="0" y1="0" y2="1">
           <stop offset="0%" stopColor="currentColor" stopOpacity="0.25" />
@@ -43,4 +49,3 @@ export default function Sparkline({ points }: { points: SparkPoint[] }) {
     </svg>
   );
 }
-

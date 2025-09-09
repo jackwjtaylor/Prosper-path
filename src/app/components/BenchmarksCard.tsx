@@ -6,7 +6,7 @@ type MetricKey = 'level'|'sr'|'ef_months'|'dsr_total'|'dti'|'invnw'|'rrr';
 
 const cache = new Map<string, any>();
 
-export function BenchmarksCard({ latest, kpis }: { latest: any; kpis: any }) {
+export function BenchmarksCard({ latest, kpis, className = '' }: { latest: any; kpis: any; className?: string }) {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [data, setData] = React.useState<{ cohort: any; n: number; metrics: Record<MetricKey, Percentiles>; fallback: boolean } | null>(null);
@@ -150,7 +150,7 @@ export function BenchmarksCard({ latest, kpis }: { latest: any; kpis: any }) {
   
 
   return (
-    <div className="p-3 border border-border rounded-xl bg-card">
+    <div className={`p-3 border border-border rounded-xl bg-card ${className}`}>
       <div className="flex items-center justify-between">
         <div>
           <div className="text-sm text-muted font-medium">People like you</div>

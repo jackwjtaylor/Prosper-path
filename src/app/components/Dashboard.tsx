@@ -200,6 +200,25 @@ export default function Dashboard() {
     if (iso) return normaliseCurrency(iso).code;
     return "AUD";
   }, [latest]);
+
+  // Normalized aggregates for first-row cards
+  const aggregates = React.useMemo(() => {
+    try {
+      const slots = (latest as any)?.inputs?.slots;
+      if (!slots) return null as null | {
+        assets: number | null; debts: number | null; income: number | null; expenses: number | null;
+      };
+      const norm = normaliseSlots(slots as any);
+      return {
+        assets: typeof norm.total_assets === 'number' ? norm.total_assets : null,
+        debts: typeof norm.total_liabilities === 'number' ? norm.total_liabilities : null,
+        income: typeof norm.net_income_total_monthly === 'number' ? norm.net_income_total_monthly : null,
+        expenses: typeof norm.total_expenses_monthly === 'number' ? norm.total_expenses_monthly : null,
+      };
+    } catch {
+      return null;
+    }
+  }, [latest]);
   // Friendly name if needed in future (unused in current UI)
   /* const name: string | null = React.useMemo(() => {
     const inputs = (latest as any)?.inputs || {};
@@ -299,17 +318,17 @@ export default function Dashboard() {
       )}
 
       {loading ? (
-        <div aria-busy="true" aria-live="polite" className="grid grid-cols-1 xl:grid-cols-5 gap-4 animate-pulse">
-          <div className="xl:col-span-5 bg-card border border-border rounded-xl shadow-sm h-36" />
-          <div className="xl:col-span-3 bg-card border border-border rounded-xl shadow-sm h-64" />
+        <div aria-busy="true" aria-live="polite" className="grid grid-cols-1 xl:grid-cols-4 gap-4 animate-pulse">
+          <div className="xl:col-span-4 bg-card border border-border rounded-xl shadow-sm h-36" />
           <div className="xl:col-span-2 bg-card border border-border rounded-xl shadow-sm h-64" />
-          <div className="xl:col-span-5 bg-card border border-border rounded-xl shadow-sm h-28" />
-          <div className="xl:col-span-5 bg-card border border-border rounded-xl shadow-sm h-72" />
+          <div className="xl:col-span-2 bg-card border border-border rounded-xl shadow-sm h-64" />
+          <div className="xl:col-span-4 bg-card border border-border rounded-xl shadow-sm h-28" />
+          <div className="xl:col-span-4 bg-card border border-border rounded-xl shadow-sm h-72" />
         </div>
       ) : (
         showUserData ? (
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
-            <div className="xl:col-span-5">
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
+            <div className="xl:col-span-4">
               <Card className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-sm text-gray-600 font-medium">Your data (for calculations)</div>
@@ -320,10 +339,11 @@ export default function Dashboard() {
             </div>
           </div>
         ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-3">
-          {/* ===== Net Worth (full width) ===== */}
-          <div className="xl:col-span-5">
-            <Card className="p-3">
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-3 auto-rows-[minmax(120px,auto)]">
+          {/* ===== Row 1 ===== */}
+          {/* 1) Net Worth (span 2) with mini sparkline */}
+          <div className="xl:col-span-2">
+            <Card className="p-3 min-h-[220px]">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="text-xs text-gray-600">Net worth</div>
@@ -350,19 +370,25 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="mt-3">
-                <RangeNetWorth series={series} latest={latest} currency={currency} />
+                <Sparkline points={series} size="sm" />
               </div>
             </Card>
           </div>
 
-          {/* ===== People like you (benchmarks, full width below net worth) ===== */}
-          <div className="xl:col-span-5">
-            <BenchmarksCard latest={latest} kpis={kpis} />
+          {/* 2) Progress insights (span 2) */}
+          <div className="xl:col-span-2">
+            <Card className="p-3 min-h-[220px]">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm text-gray-600 font-medium">Progress insights</div>
+              </div>
+              <ProgressInsights kpis={kpis} />
+            </Card>
           </div>
 
-          {/* ===== Level (full width below net worth) ===== */}
-          <div className="xl:col-span-5">
-            <Card className="p-3">
+          {/* ===== Row 2 ===== */}
+          {/* 1) Level (span 1) */}
+          <div className="xl:col-span-1">
+            <Card className="p-3 min-h-[120px]">
               <div className="flex items-start justify-between">
                 <div className="min-w-0">
                   <div className="text-xs text-muted">Level</div>
@@ -373,35 +399,87 @@ export default function Dashboard() {
                   <div className="text-xs ink-muted mt-1">{LEVEL_DESCRIPTIONS[overallIdx - 1]}</div>
                 </div>
               </div>
-              {/* Journey labels */}
+            </Card>
+          </div>
+
+          {/* 2) People like you (benchmarks, span 1) */}
+          <div className="xl:col-span-1">
+            <BenchmarksCard latest={latest} kpis={kpis} className="h-full min-h-[120px] flex flex-col" />
+          </div>
+
+          {/* 3) Assets / Liabilities totals (span 1) with mini chart */}
+          <div className="xl:col-span-1">
+            <Card className="p-3 min-h-[120px]">
+              <div className="text-xs text-gray-600">Assets / Liabilities</div>
+              <div className="mt-1 flex items-baseline gap-3">
+                <div className="text-sm font-semibold">{aggregates?.assets != null ? fmtCurrency(aggregates.assets, currency) : '—'}</div>
+                <div className="text-[11px] text-muted">Assets</div>
+              </div>
+              <div className="-mt-1 flex items-baseline gap-3">
+                <div className="text-sm font-semibold">{aggregates?.debts != null ? fmtCurrency(aggregates.debts, currency) : '—'}</div>
+                <div className="text-[11px] text-muted">Liabilities</div>
+              </div>
               <div className="mt-2">
-                <div className="grid grid-cols-10 gap-1 text-[9px] leading-3 text-muted text-center">
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <div key={i} className="truncate" title={`Level ${i+1} — ${getProsperLevelLabel(i+1)}`}>{LEVEL_SHORT_NAMES[i]}</div>
-                  ))}
-                </div>
-                <div className="mt-1 text-[11px] ink-muted">
-                  Next: Level {Math.min(10, overallIdx + 1)} — {LEVEL_SHORT_NAMES[Math.min(9, overallIdx)]}. {LEVEL_DESCRIPTIONS[Math.min(9, overallIdx)]}
-                </div>
+                {typeof aggregates?.assets === 'number' && (aggregates!.assets as number) > 0 ? (
+                  <div className="w-full h-2 rounded bg-gray-200 overflow-hidden" aria-label="Assets vs liabilities mini chart">
+                    {(() => {
+                      const assets = (aggregates!.assets as number);
+                      const debts = Math.max(0, Number(aggregates!.debts || 0));
+                      const debtPct = Math.min(1, debts / Math.max(assets, 1e-9));
+                      const equityPct = Math.max(0, 1 - debtPct);
+                      return (
+                        <div className="w-full h-full flex">
+                          <div className="h-full bg-red-500" style={{ width: `${Math.round(debtPct * 100)}%` }} title={`Liabilities: ${fmtCurrency(debts, currency)}`} />
+                          <div className="h-full bg-emerald-500" style={{ width: `${Math.round(equityPct * 100)}%` }} title={`Equity: ${fmtCurrency(Math.max(assets - debts, 0), currency)}`} />
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-muted">Add assets and debts to compute totals</div>
+                )}
               </div>
             </Card>
           </div>
 
-          {/* ===== Progress insights ===== */}
-          <div className="xl:col-span-5">
-            <Card className="p-3">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-sm text-gray-600 font-medium">Progress insights</div>
+          {/* 4) Income / Expenses totals (span 1) with mini chart */}
+          <div className="xl:col-span-1">
+            <Card className="p-3 min-h-[120px]">
+              <div className="text-xs text-gray-600">Income / Expenses (monthly)</div>
+              <div className="mt-1 flex items-baseline gap-3">
+                <div className="text-sm font-semibold">{aggregates?.income != null ? fmtCurrency(aggregates.income, currency) : '—'}</div>
+                <div className="text-[11px] text-muted">Income</div>
               </div>
-              <ProgressInsights kpis={kpis} />
+              <div className="-mt-1 flex items-baseline gap-3">
+                <div className="text-sm font-semibold">{aggregates?.expenses != null ? fmtCurrency(aggregates.expenses, currency) : '—'}</div>
+                <div className="text-[11px] text-muted">Expenses</div>
+              </div>
+              <div className="mt-2">
+                {typeof aggregates?.income === 'number' && (aggregates!.income as number) > 0 ? (
+                  <div className="w-full h-2 rounded bg-gray-200 overflow-hidden" aria-label="Income vs expenses mini chart">
+                    {(() => {
+                      const income = (aggregates!.income as number);
+                      const expenses = Math.max(0, Number(aggregates!.expenses || 0));
+                      const expPct = Math.min(1, expenses / Math.max(income, 1e-9));
+                      const leftPct = Math.max(0, 1 - expPct);
+                      return (
+                        <div className="w-full h-full flex">
+                          <div className="h-full bg-red-500" style={{ width: `${Math.round(expPct * 100)}%` }} title={`Expenses: ${fmtCurrency(expenses, currency)}`} />
+                          <div className="h-full bg-emerald-500" style={{ width: `${Math.round(leftPct * 100)}%` }} title={`Leftover: ${fmtCurrency(Math.max(income - expenses, 0), currency)}`} />
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-muted">Add income and expenses to compute totals</div>
+                )}
+              </div>
             </Card>
           </div>
 
-          
-
-          {/* ===== Action Plan (single card: uncompleted first, completed at bottom) ===== */}
-          <div className="xl:col-span-5">
-            <Card className="p-3">
+          {/* ===== Action Plan (big: spans 4; two-column items) ===== */}
+          <div className="xl:col-span-4">
+            <Card className="p-3 min-h-[280px]">
               <div className="flex items-center justify-between mb-2">
                 <div className="text-sm text-gray-600 font-medium">Action plan</div>
               </div>
@@ -411,8 +489,8 @@ export default function Dashboard() {
 
           {/* (Data review is shown exclusively when toggled) */}
 
-          {/* ===== KPI Grid (by pillar, sorted by urgency) ===== */}
-          <div className="xl:col-span-5">
+          {/* ===== KPI Grid (big: spans 4) ===== */}
+          <div className="xl:col-span-4">
             <Card className="p-3">
               <KpiGrid kpis={kpis} />
             </Card>
@@ -446,7 +524,7 @@ export default function Dashboard() {
 
 /** Small card wrapper for consistent styling */
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`bg-card border border-border rounded-xl shadow-sm ${className}`}>{children}</div>;
+  return <div className={`bg-card border border-border rounded-xl shadow-sm h-full flex flex-col ${className}`}>{children}</div>;
 }
 
 function V2KpiBar({
@@ -560,6 +638,43 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
   function push(id: string, title: string, pillar: string, how: string[], relevant: boolean, reason: string) {
     catalogue.push({ action_id: id, title, how, pillar, relevant, reason });
   }
+  // Foundational, ungated actions that apply to everyone
+  push(
+    'FOUND_MONEY_TALK',
+    'Have the Money Talk',
+    'protect',
+    [
+      'Schedule a 30‑minute chat with your partner or yourself.',
+      'List 2–3 goals and 2 pain points about money.',
+      'Agree one small improvement to try this week.',
+    ],
+    true,
+    'Foundational habit — sets direction and reduces stress.'
+  );
+  push(
+    'FOUND_GET_YOUR_SHIT_TOGETHER',
+    'Get your $hit Together',
+    'save',
+    [
+      'Create one folder for key docs (IDs, taxes, statements).',
+      'Write down all accounts and due dates in one place.',
+      'Turn on alerts or autopay for critical bills.',
+    ],
+    true,
+    'Organize essentials so nothing critical slips.'
+  );
+  push(
+    'FOUND_SET_FOUNDATIONS',
+    'Set your Foundations',
+    'grow',
+    [
+      'Open a 3‑bucket system: Bills, Everyday, Savings.',
+      'Automate a small weekly transfer to Savings.',
+      'Review once a month and adjust targets.',
+    ],
+    true,
+    'Simple system to make good choices automatic.'
+  );
   // Emergency fund ≥ 3 mo
   {
     const ef = K.ef_months as number | null | undefined;
@@ -680,6 +795,21 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
     if ((a as any).relevant !== (b as any).relevant) return (a as any).relevant ? -1 : 1;
     return a.title.localeCompare(b.title);
   });
+  // Pin foundational actions to the top in a fixed order
+  {
+    const pinnedOrder = [
+      'FOUND_MONEY_TALK',
+      'FOUND_GET_YOUR_SHIT_TOGETHER',
+      'FOUND_SET_FOUNDATIONS',
+    ];
+    const pinned: any[] = [];
+    for (const id of pinnedOrder) {
+      const it = uncompleted.find((u) => (u.action_id || '') === id);
+      if (it) pinned.push(it);
+    }
+    const remainder = uncompleted.filter((u) => !pinnedOrder.includes((u.action_id || '')));
+    uncompleted = [...pinned, ...remainder];
+  }
   const completedFromRecs = deduped.filter((it) => isCompleted(it) && !isDismissed(it));
   const completedExtra = completedItems.filter((it) => {
     const t = (it.title || '').toString().toLowerCase();
@@ -804,20 +934,26 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {(completedFromRecs.length + completedExtra.length) > 0 && (
         <div className="flex items-center justify-end">
           <button className="text-xs underline text-gray-600 hover:text-gray-800" onClick={removeAllCompleted}>Remove all completed</button>
         </div>
       )}
-          {uncompleted.map((r) => (
-            <ActionItem key={`u-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {uncompleted.map((r) => (
+          <ActionItem key={`u-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} />
+        ))}
+      </div>
+      {completedFromRecs.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {completedFromRecs.map((r) => (
+            <ActionItem key={`c-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} completed />
           ))}
-      {completedFromRecs.map((r) => (
-        <ActionItem key={`c-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} completed />
-      ))}
-          {completedExtra.length > 0 && (
-            <div className="pt-1">
+        </div>
+      )}
+      {completedExtra.length > 0 && (
+        <div className="pt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
           {completedExtra.map((it) => (
             <div key={it.id} className="border border-border rounded-md p-2 bg-card flex items-center justify-between">
               <div>
@@ -846,8 +982,8 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
               </button>
             </div>
           ))}
-            </div>
-          )}
+        </div>
+      )}
     </div>
   );
 }

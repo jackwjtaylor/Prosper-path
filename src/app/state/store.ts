@@ -55,7 +55,7 @@ let state: AppStore = {
   isAudioPlaybackEnabled: typeof window !== 'undefined' ? readPersistedBoolean('audioPlaybackEnabled', true) : true,
   voice: typeof window !== 'undefined' ? readPersistedString('voice', 'sage') : 'sage',
   isMicMuted: typeof window !== 'undefined' ? readPersistedBoolean('micMuted', false) : false,
-  isTranscriptVisible: typeof window !== 'undefined' ? readPersistedBoolean('transcriptVisible', true) : true,
+  isTranscriptVisible: typeof window !== 'undefined' ? readPersistedBoolean('transcriptVisible', false) : false,
 
   setSessionStatus: (s) => setState({ sessionStatus: s }),
   setSelectedAgentName: (name) => setState({ selectedAgentName: name }),
