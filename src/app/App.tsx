@@ -442,7 +442,7 @@ function App() {
   return (
     <div className="text-base flex flex-col h-screen bg-app text-foreground">
       {/* Header */}
-      <div className="p-5 text-lg font-semibold flex justify-between items-center max-w-7xl mx-auto w-full relative border-b border-border bg-card backdrop-blur">
+      <div className="p-5 text-lg font-semibold flex justify-between items-center max-w-7xl mx-auto w-full relative border-b border-background bg-background backdrop-blur">
         <Link href="/home" className="flex items-center">
           <Image src="2D76K394.eps.svg" alt="Prosper Logo" width={20} height={20} className="mr-2" />
           <span>Prosper AI <span className="text-gray-400">your personal wealth coach</span></span>

@@ -11,10 +11,10 @@
   --warn: #b45309;            /* amber-700 */
   --risk: #be123c;            /* rose-700 */
 
-  --background: #fafafa;
+  --background: #DAD6C9;
   --foreground: #171717;
-  --bg: #ffffff;
-  --card: #ffffff;
+  --bg: #DAD6C9;
+  --card: #EFEEEB;
   --muted: #6b7280;           /* gray-500 */
   --border: #e5e7eb;          /* gray-200 */
 
@@ -29,32 +29,32 @@
 /* Dark theme (auto via media, can be overridden by data-theme) */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #e5e7eb;
-    --bg: #0b0d0e;     /* near black */
-    --card: #111315;   /* dark card */
-    --muted: #9ca3af;  /* gray-400 */
-    --border: #1f2937; /* gray-800 */
+    --background: #DAD6C9;
+    --foreground: #171717;
+    --bg: #DAD6C9;
+    --card: #EFEEEB;
+    --muted: #6b7280;  /* gray-500 */
+    --border: #e5e7eb; /* gray-200 */
   }
 }
 
 /* Explicit theme overrides */
 [data-theme="light"] {
-  --background: #fafafa;
+  --background: #DAD6C9;
   --foreground: #171717;
-  --bg: #ffffff;
-  --card: #ffffff;
+  --bg: #DAD6C9;
+  --card: #EFEEEB;
   --muted: #6b7280;
   --border: #e5e7eb;
 }
 
 [data-theme="dark"] {
-  --background: #0a0a0a;
-  --foreground: #e5e7eb;
-  --bg: #0b0d0e;
-  --card: #111315;
-  --muted: #9ca3af;
-  --border: #1f2937;
+  --background: #DAD6C9;
+  --foreground: #171717;
+  --bg: #DAD6C9;
+  --card: #EFEEEB;
+  --muted: #6b7280;
+  --border: #e5e7eb;
 }
 
 /* Base typography + layout */

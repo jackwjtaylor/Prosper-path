@@ -524,7 +524,7 @@ export default function Dashboard() {
 
 /** Small card wrapper for consistent styling */
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`bg-card border border-border rounded-xl shadow-sm h-full flex flex-col ${className}`}>{children}</div>;
+  return <div className={`bg-card rounded-xl shadow-sm h-full flex flex-col ${className}`}>{children}</div>;
 }
 
 function V2KpiBar({
@@ -603,11 +603,69 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
   // Confetti across the dashboard when marking done
   const [confettiOn, setConfettiOn] = React.useState(false);
   const [confettiKey, setConfettiKey] = React.useState(0);
+  // Upgraded "ding" celebration (Web Audio): quick triad + soft hiss
+  const playDing = React.useCallback(() => {
+    try {
+      const AC: any = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AC) return;
+      const ctx = new AC();
+      const master = ctx.createGain();
+      master.gain.value = 0.6;
+      master.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+      const env = (time: number, g: GainNode, a = 0.005, d = 0.25) => {
+        g.gain.cancelScheduledValues(time);
+        g.gain.setValueAtTime(0.0001, time);
+        g.gain.exponentialRampToValueAtTime(0.6, time + a);
+        g.gain.exponentialRampToValueAtTime(0.0001, time + d);
+      };
+
+      // Musical triad A major (A5, C#6, E6)
+      const freqs = [880, 1108.73, 1318.51];
+      freqs.forEach((f, i) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = i === 0 ? 'triangle' : (i === 1 ? 'sine' : 'square');
+        osc.frequency.value = f;
+        osc.connect(g);
+        g.connect(master);
+        const start = now + i * 0.01; // tiny stagger
+        env(start, g, 0.006, 0.35 - i * 0.05);
+        osc.start(start);
+        osc.stop(start + 0.4);
+      });
+
+      // Soft high-pass noise burst for sparkle
+      const noiseDur = 0.12;
+      const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * noiseDur), ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.9;
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      const filt = ctx.createBiquadFilter();
+      filt.type = 'highpass';
+      filt.frequency.value = 1200;
+      const nGain = ctx.createGain();
+      nGain.gain.value = 0.15;
+      src.connect(filt);
+      filt.connect(nGain);
+      nGain.connect(master);
+      src.start(now + 0.03);
+      src.stop(now + 0.03 + noiseDur);
+
+      setTimeout(() => { try { ctx.close(); } catch {} }, 700);
+    } catch {}
+  }, []);
   const triggerConfetti = React.useCallback(() => {
     setConfettiKey((k) => k + 1);
     setConfettiOn(true);
-    setTimeout(() => setConfettiOn(false), 1800);
-  }, []);
+    // Haptic vibration (where supported)
+    try { if (typeof navigator !== 'undefined' && 'vibrate' in navigator) (navigator as any).vibrate([10, 30, 10]); } catch {}
+    // Ding
+    playDing();
+    setTimeout(() => setConfettiOn(false), 2000);
+  }, [playDing]);
   React.useEffect(() => {
     (async () => {
       try {
@@ -886,16 +944,40 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
       {confettiOn && (
         <div key={confettiKey} className="fixed inset-0 pointer-events-none z-[9999] overflow-hidden">
           <style jsx global>{`
-            @keyframes confetti-fall { 0% { transform: translate3d(0,-100vh,0) rotate(0deg); opacity: 1; } 100% { transform: translate3d(0,100vh,0) rotate(720deg); opacity: 0; } }
+            @keyframes confetti-left {
+              0% { transform: translate3d(0,-100vh,0) rotate(0deg); opacity: 1; }
+              100% { transform: translate3d(-30vw,100vh,0) rotate(1080deg); opacity: 0; }
+            }
+            @keyframes confetti-right {
+              0% { transform: translate3d(0,-100vh,0) rotate(0deg); opacity: 1; }
+              100% { transform: translate3d(30vw,100vh,0) rotate(-1080deg); opacity: 0; }
+            }
           `}</style>
-          {Array.from({ length: 80 }).map((_, i) => {
+          {Array.from({ length: 220 }).map((_, i) => {
             const left = Math.random() * 100;
-            const size = 6 + Math.random() * 6;
-            const duration = 1.2 + Math.random() * 0.9;
-            const delay = Math.random() * 0.25;
-            const colors = ['#ef4444','#10b981','#3b82f6','#f59e0b','#a855f7'];
+            const w = 10 + Math.random() * 14; // width 10..24
+            const h = 6 + Math.random() * 10;  // height 6..16
+            const duration = 1.6 + Math.random() * 1.4;
+            const delay = Math.random() * 0.5;
+            const colors = ['#FB4D17', '#083630', '#1F514A'];
             const color = colors[i % colors.length];
-            const style: React.CSSProperties = { position: 'absolute', left: `${left}%`, top: '-10%', width: `${size}px`, height: `${size * 0.6}px`, backgroundColor: color, borderRadius: '2px', transform: 'translate3d(0,0,0)', animation: `confetti-fall ${duration}s ease-out ${delay}s forwards` };
+            const rounded = Math.random() < 0.35 ? '50%' : '4px';
+            const drift = Math.random() < 0.5 ? 'confetti-left' : 'confetti-right';
+            const rotateStart = Math.floor(Math.random() * 360);
+            const style: React.CSSProperties = {
+              position: 'absolute',
+              left: `${left}%`,
+              top: '-12%',
+              width: `${w}px`,
+              height: `${h}px`,
+              backgroundColor: color,
+              borderRadius: rounded,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+              opacity: 0.98,
+              transform: `translate3d(0,0,0) rotate(${rotateStart}deg)`,
+              willChange: 'transform, opacity',
+              animation: `${drift} ${duration}s cubic-bezier(0.15,0.65,0.25,1) ${delay}s forwards`,
+            };
             return <span key={i} style={style} />;
           })}
         </div>

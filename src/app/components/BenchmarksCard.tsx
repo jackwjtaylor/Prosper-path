@@ -150,7 +150,7 @@ export function BenchmarksCard({ latest, kpis, className = '' }: { latest: any; 
   
 
   return (
-    <div className={`p-3 border border-border rounded-xl bg-card ${className}`}>
+    <div className={`p-3 rounded-xl bg-card ${className}`}>
       <div className="flex items-center justify-between">
         <div>
           <div className="text-sm text-muted font-medium">People like you</div>
