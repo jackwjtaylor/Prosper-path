@@ -3,7 +3,7 @@ import React from "react";
 
 export type SparkPoint = { ts?: string; value: number };
 
-export default function Sparkline({ points, size = 'md' }: { points: SparkPoint[]; size?: 'sm' | 'md' }) {
+export default function Sparkline({ points, size = 'md' }: { points: SparkPoint[]; size?: 'sm' | 'md' | 'lg' | 'fill' }) {
   const w = 600;
   const h = 120;
   const { d, areaD } = React.useMemo(() => {
@@ -21,7 +21,7 @@ export default function Sparkline({ points, size = 'md' }: { points: SparkPoint[
 
   if (!d) {
     return (
-      <div className="h-20 w-full bg-card rounded-md border border-border flex items-center justify-center text-xs ink-muted">
+      <div className={`w-full bg-card rounded-md border border-border flex items-center justify-center text-xs ink-muted ${size === 'sm' ? 'h-16 md:h-20' : size === 'lg' ? 'h-40 md:h-56' : size === 'fill' ? 'h-full' : 'h-28 md:h-36'}`}>
         <div className="inline-flex items-center gap-2">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" /></svg>
           No data
@@ -33,9 +33,10 @@ export default function Sparkline({ points, size = 'md' }: { points: SparkPoint[
   return (
     <svg
       viewBox={`0 0 ${w} ${h}`}
-      className={`w-full ${size === 'sm' ? 'h-12 md:h-16' : 'h-28 md:h-36'}`}
+      className={`w-full ${size === 'sm' ? 'h-16 md:h-20' : size === 'lg' ? 'h-40 md:h-56' : size === 'fill' ? 'h-full' : 'h-28 md:h-36'}`}
       role="img"
       aria-label="Net worth trend"
+      preserveAspectRatio="none"
       color="var(--brand)"
     >
       <defs>

@@ -6,6 +6,7 @@ import { getProsperLevelLabel } from "@/app/lib/prosperLevelLabels";
 import { normaliseCurrency } from "@/app/lib/validate";
 import { normaliseSlots } from "@/app/lib/normalise";
 import BenchmarksCard from "@/app/components/BenchmarksCard";
+import TopVoiceControls from "@/app/components/TopVoiceControls";
 import LevelPill from "@/app/components/ui/LevelPill";
 import ActionCard from "@/app/components/ui/ActionCard";
 import Sparkline from "@/app/components/ui/Sparkline";
@@ -219,6 +220,11 @@ export default function Dashboard() {
       return null;
     }
   }, [latest]);
+
+  // Details toggles for compact cards
+  const [showLevelDetails, setShowLevelDetails] = React.useState(false);
+  const [showALDetails, setShowALDetails] = React.useState(false);
+  const [showIEDetails, setShowIEDetails] = React.useState(false);
   // Friendly name if needed in future (unused in current UI)
   /* const name: string | null = React.useMemo(() => {
     const inputs = (latest as any)?.inputs || {};
@@ -304,6 +310,8 @@ export default function Dashboard() {
   return (
     <>
     <div className="w-full h-full">
+      {/* Top-center voice controls to emphasize voice-first UX */}
+      <TopVoiceControls />
       {showPremiumBanner && (
         <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
           Premium unlocked — thanks for supporting Prosper! Your full history and premium features are enabled.
@@ -369,17 +377,17 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-              <div className="mt-3">
-                <Sparkline points={series} size="sm" />
+              <div className="mt-2 flex-1 min-h-[120px]">
+                <Sparkline points={series} size="fill" />
               </div>
             </Card>
           </div>
 
-          {/* 2) Progress insights (span 2) */}
+          {/* 2) Prosper insights (span 2) */}
           <div className="xl:col-span-2">
             <Card className="p-3 min-h-[220px]">
               <div className="flex items-center justify-between mb-2">
-                <div className="card-section-title">Progress insights</div>
+                <div className="card-section-title">Prosper Insights</div>
               </div>
               <ProgressInsights kpis={kpis} />
             </Card>
@@ -388,7 +396,15 @@ export default function Dashboard() {
           {/* ===== Row 2 ===== */}
           {/* 1) Level (span 1) */}
           <div className="xl:col-span-1">
-            <Card className="p-3 min-h-[120px]">
+            <Card className="p-3 min-h-[120px] relative">
+              <button
+                className="absolute top-2 right-2 h-6 w-6 rounded-full border border-border bg-card text-muted flex items-center justify-center hover:opacity-90"
+                aria-label={showLevelDetails ? 'Hide details' : 'Show details'}
+                title={showLevelDetails ? 'Hide details' : 'Show details'}
+                onClick={() => setShowLevelDetails(v => !v)}
+              >
+                <span className="text-xs">{showLevelDetails ? '−' : '+'}</span>
+              </button>
               <div className="flex items-start justify-between">
                 <div className="min-w-0">
                   <div className="card-label">Level</div>
@@ -399,6 +415,11 @@ export default function Dashboard() {
                   <div className="card-meta mt-1">{LEVEL_DESCRIPTIONS[overallIdx - 1]}</div>
                 </div>
               </div>
+              {showLevelDetails && (
+                <div className="mt-2 card-meta">
+                  Next: Level {Math.min(10, overallIdx + 1)} — {LEVEL_SHORT_NAMES[Math.min(9, overallIdx)]}.
+                </div>
+              )}
             </Card>
           </div>
 
@@ -409,7 +430,15 @@ export default function Dashboard() {
 
           {/* 3) Assets / Liabilities totals (span 1) with mini chart */}
           <div className="xl:col-span-1">
-            <Card className="p-3 min-h-[120px]">
+            <Card className="p-3 min-h-[120px] relative">
+              <button
+                className="absolute top-2 right-2 h-6 w-6 rounded-full border border-border bg-card text-muted flex items-center justify-center hover:opacity-90"
+                aria-label={showALDetails ? 'Hide details' : 'Show details'}
+                title={showALDetails ? 'Hide details' : 'Show details'}
+                onClick={() => setShowALDetails(v => !v)}
+              >
+                <span className="text-xs">{showALDetails ? '−' : '+'}</span>
+              </button>
               <div className="card-label">Assets / Liabilities</div>
               <div className="mt-1 flex items-baseline gap-3">
                 <div className="card-value">{aggregates?.assets != null ? fmtCurrency(aggregates.assets, currency) : '—'}</div>
@@ -439,12 +468,32 @@ export default function Dashboard() {
                   <div className="text-[11px] text-muted">Add assets and debts to compute totals</div>
                 )}
               </div>
+              {showALDetails && (
+                <div className="mt-2 card-meta">
+                  {typeof aggregates?.assets === 'number' && (
+                    <>
+                      <span>Equity:&nbsp;<b>{fmtCurrency(Math.max((aggregates!.assets as number) - Math.max(0, (aggregates!.debts as number) || 0), 0), currency)}</b></span>
+                      {typeof aggregates?.debts === 'number' && (aggregates!.assets as number) > 0 && (
+                        <span className="ml-3">Debt ratio:&nbsp;<b>{((Math.max(0, (aggregates!.debts as number)) / Math.max(aggregates!.assets as number, 1e-9)) * 100).toFixed(0)}%</b></span>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </Card>
           </div>
 
           {/* 4) Income / Expenses totals (span 1) with mini chart */}
           <div className="xl:col-span-1">
-            <Card className="p-3 min-h-[120px]">
+            <Card className="p-3 min-h-[120px] relative">
+              <button
+                className="absolute top-2 right-2 h-6 w-6 rounded-full border border-border bg-card text-muted flex items-center justify-center hover:opacity-90"
+                aria-label={showIEDetails ? 'Hide details' : 'Show details'}
+                title={showIEDetails ? 'Hide details' : 'Show details'}
+                onClick={() => setShowIEDetails(v => !v)}
+              >
+                <span className="text-xs">{showIEDetails ? '−' : '+'}</span>
+              </button>
               <div className="card-label">Income / Expenses (monthly)</div>
               <div className="mt-1 flex items-baseline gap-3">
                 <div className="card-value">{aggregates?.income != null ? fmtCurrency(aggregates.income, currency) : '—'}</div>
@@ -474,6 +523,18 @@ export default function Dashboard() {
                   <div className="text-[11px] text-muted">Add income and expenses to compute totals</div>
                 )}
               </div>
+              {showIEDetails && (
+                <div className="mt-2 card-meta">
+                  {typeof aggregates?.income === 'number' && (
+                    <>
+                      <span>Leftover:&nbsp;<b>{fmtCurrency(Math.max((aggregates!.income as number) - Math.max(0, (aggregates!.expenses as number) || 0), 0), currency)}</b></span>
+                      {typeof aggregates?.expenses === 'number' && (aggregates!.income as number) > 0 && (
+                        <span className="ml-3">Savings rate:&nbsp;<b>{(((Math.max((aggregates!.income as number) - Math.max(0, (aggregates!.expenses as number) || 0), 0)) / Math.max(aggregates!.income as number, 1e-9)) * 100).toFixed(0)}%</b></span>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </Card>
           </div>
 
@@ -996,7 +1057,7 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
       {completedExtra.length > 0 && (
         <div className="pt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
           {completedExtra.map((it) => (
-            <div key={it.id} className="border border-border rounded-md p-2 bg-card flex items-center justify-between">
+            <div key={it.id} className="border border-border rounded-md p-2 bg-white flex items-center justify-between">
               <div>
                 <div className="text-sm font-medium text-foreground">{it.title || 'Action'}</div>
                 <div className="text-[11px] text-muted">{it.completed_at ? (

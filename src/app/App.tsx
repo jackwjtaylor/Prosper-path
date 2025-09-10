@@ -88,6 +88,13 @@ function App() {
     });
     return () => { sub.subscription?.unsubscribe(); };
   }, []);
+
+  // Allow UI components to toggle the voice connection globally
+  useEffect(() => {
+    const onToggle = () => { onToggleConnection(); };
+    window.addEventListener('pp:toggle_connection', onToggle as any);
+    return () => window.removeEventListener('pp:toggle_connection', onToggle as any);
+  }, [sessionStatus]);
   useEffect(() => {
     (async () => {
       if (!householdId) return;
@@ -517,6 +524,38 @@ function App() {
               Upgrade
             </button>
           )}
+
+          {/* Header mic icon */}
+          <button
+            onClick={() => {
+              if (sessionStatus === 'CONNECTED') {
+                setIsMicMuted(!isMicMuted);
+              } else {
+                onToggleConnection();
+              }
+            }}
+            aria-pressed={sessionStatus === 'CONNECTED' && !isMicMuted}
+            aria-label={sessionStatus === 'CONNECTED' ? (isMicMuted ? 'Unmute microphone' : 'Mute microphone') : 'Connect voice'}
+            title={sessionStatus === 'CONNECTED' ? (isMicMuted ? 'Unmute mic' : 'Mute mic') : 'Connect voice'}
+            className={`relative h-9 w-9 rounded-full border flex items-center justify-center transition-colors ${
+              sessionStatus !== 'CONNECTED'
+                ? 'bg-gray-200 text-gray-500 border-gray-200'
+                : isMicMuted
+                ? 'bg-red-600 text-white border-red-600'
+                : 'bg-emerald-600 text-white border-emerald-600'
+            }`}
+          >
+            {sessionStatus === 'CONNECTED' && !isMicMuted && (
+              <span className="animate-ping absolute inline-flex h-9 w-9 rounded-full bg-emerald-400 opacity-30"></span>
+            )}
+            <span className="relative">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
+                <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z"/>
+                <path d="M5 11a7 7 0 0 0 14 0" fill="none" stroke="currentColor" strokeWidth="1.8"/>
+                <path d="M12 18v3" fill="none" stroke="currentColor" strokeWidth="1.8"/>
+              </svg>
+            </span>
+          </button>
 
           <ThemeToggle />
           <ProfileMenu

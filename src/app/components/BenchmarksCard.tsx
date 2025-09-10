@@ -150,7 +150,15 @@ export function BenchmarksCard({ latest, kpis, className = '' }: { latest: any; 
   
 
   return (
-    <div className={`p-3 rounded-xl bg-card ${className}`}>
+    <div className={`p-3 rounded-xl bg-card relative ${className}`}>
+      <button
+        className="absolute top-2 right-2 h-6 w-6 rounded-full border border-border bg-card text-muted flex items-center justify-center hover:opacity-90"
+        aria-label={showDetails ? 'Hide details' : 'Show details'}
+        title={showDetails ? 'Hide details' : 'Show details'}
+        onClick={() => setShowDetails(v => !v)}
+      >
+        <span className="text-xs">{showDetails ? '−' : '+'}</span>
+      </button>
       <div className="flex items-center justify-between">
         <div>
           <div className="card-section-title">People like you</div>
@@ -159,12 +167,7 @@ export function BenchmarksCard({ latest, kpis, className = '' }: { latest: any; 
             <span className="ml-2 card-meta">{topLine.detail}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button className="text-xs px-2 py-1 rounded border border-border bg-card hover:opacity-90" onClick={() => setShowDetails(v => !v)} title={showDetails ? 'Hide details' : 'Show details'}>
-            {showDetails ? 'Hide' : 'Details'}
-          </button>
-          <button className="text-xs px-2 py-1 rounded border border-border bg-card hover:opacity-90" onClick={share} title="Share your peer comparison">Share</button>
-        </div>
+        <div />
       </div>
       {showDetails && (
       <div className="mt-2 space-y-2">

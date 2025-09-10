@@ -14,7 +14,7 @@ type ActionCardProps = {
 
 export default function ActionCard({ title, why, steps, recommended, completed, onOpenChat, onDone, onDismiss }: ActionCardProps) {
   return (
-    <div className={`border border-border rounded-md p-2 bg-card`}>
+    <div className={`border border-border rounded-md p-2 bg-white`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className={`text-sm font-medium truncate text-foreground`}>
