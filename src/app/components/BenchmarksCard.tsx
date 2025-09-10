@@ -153,10 +153,10 @@ export function BenchmarksCard({ latest, kpis, className = '' }: { latest: any; 
     <div className={`p-3 rounded-xl bg-card ${className}`}>
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-sm text-muted font-medium">People like you</div>
-          <div className="text-xs text-muted mt-0.5">
-            <span className="text-base font-semibold text-foreground mr-1">{topLine.top}%</span> {topLine.text}
-            <span className="ml-2 text-muted">{topLine.detail}</span>
+          <div className="card-section-title">People like you</div>
+          <div className="card-meta mt-0.5">
+            <span className="card-value mr-1">{topLine.top}%</span> {topLine.text}
+            <span className="ml-2 card-meta">{topLine.detail}</span>
           </div>
         </div>
         <div className="flex items-center gap-2">

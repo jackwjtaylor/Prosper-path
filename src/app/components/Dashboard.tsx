@@ -346,11 +346,11 @@ export default function Dashboard() {
             <Card className="p-3 min-h-[220px]">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="text-xs text-gray-600">Net worth</div>
-                  <div className="text-2xl font-semibold leading-tight">
+                  <div className="card-label">Net worth</div>
+                  <div className="card-value text-2xl">
                     {Number.isFinite(last as number) ? fmtCurrency(last as number, currency) : '—'}
                   </div>
-                  <div className="text-[11px] text-gray-600 mt-1">
+                  <div className="card-meta mt-1">
                     {series?.length ? (
                       <>
                         Updated{' '}
@@ -379,7 +379,7 @@ export default function Dashboard() {
           <div className="xl:col-span-2">
             <Card className="p-3 min-h-[220px]">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-sm text-gray-600 font-medium">Progress insights</div>
+                <div className="card-section-title">Progress insights</div>
               </div>
               <ProgressInsights kpis={kpis} />
             </Card>
@@ -391,12 +391,12 @@ export default function Dashboard() {
             <Card className="p-3 min-h-[120px]">
               <div className="flex items-start justify-between">
                 <div className="min-w-0">
-                  <div className="text-xs text-muted">Level</div>
+                  <div className="card-label">Level</div>
                   <div className="flex items-center gap-3 mt-1">
                     <LevelPill level={overallIdx} />
-                    <div className="text-sm font-semibold leading-tight truncate">{overallLevelLabel}</div>
+                    <div className="card-value text-lg truncate">{overallLevelLabel}</div>
                   </div>
-                  <div className="text-xs ink-muted mt-1">{LEVEL_DESCRIPTIONS[overallIdx - 1]}</div>
+                  <div className="card-meta mt-1">{LEVEL_DESCRIPTIONS[overallIdx - 1]}</div>
                 </div>
               </div>
             </Card>
@@ -410,14 +410,14 @@ export default function Dashboard() {
           {/* 3) Assets / Liabilities totals (span 1) with mini chart */}
           <div className="xl:col-span-1">
             <Card className="p-3 min-h-[120px]">
-              <div className="text-xs text-gray-600">Assets / Liabilities</div>
+              <div className="card-label">Assets / Liabilities</div>
               <div className="mt-1 flex items-baseline gap-3">
-                <div className="text-sm font-semibold">{aggregates?.assets != null ? fmtCurrency(aggregates.assets, currency) : '—'}</div>
-                <div className="text-[11px] text-muted">Assets</div>
+                <div className="card-value">{aggregates?.assets != null ? fmtCurrency(aggregates.assets, currency) : '—'}</div>
+                <div className="card-meta">Assets</div>
               </div>
               <div className="-mt-1 flex items-baseline gap-3">
-                <div className="text-sm font-semibold">{aggregates?.debts != null ? fmtCurrency(aggregates.debts, currency) : '—'}</div>
-                <div className="text-[11px] text-muted">Liabilities</div>
+                <div className="card-value">{aggregates?.debts != null ? fmtCurrency(aggregates.debts, currency) : '—'}</div>
+                <div className="card-meta">Liabilities</div>
               </div>
               <div className="mt-2">
                 {typeof aggregates?.assets === 'number' && (aggregates!.assets as number) > 0 ? (
@@ -445,14 +445,14 @@ export default function Dashboard() {
           {/* 4) Income / Expenses totals (span 1) with mini chart */}
           <div className="xl:col-span-1">
             <Card className="p-3 min-h-[120px]">
-              <div className="text-xs text-gray-600">Income / Expenses (monthly)</div>
+              <div className="card-label">Income / Expenses (monthly)</div>
               <div className="mt-1 flex items-baseline gap-3">
-                <div className="text-sm font-semibold">{aggregates?.income != null ? fmtCurrency(aggregates.income, currency) : '—'}</div>
-                <div className="text-[11px] text-muted">Income</div>
+                <div className="card-value">{aggregates?.income != null ? fmtCurrency(aggregates.income, currency) : '—'}</div>
+                <div className="card-meta">Income</div>
               </div>
               <div className="-mt-1 flex items-baseline gap-3">
-                <div className="text-sm font-semibold">{aggregates?.expenses != null ? fmtCurrency(aggregates.expenses, currency) : '—'}</div>
-                <div className="text-[11px] text-muted">Expenses</div>
+                <div className="card-value">{aggregates?.expenses != null ? fmtCurrency(aggregates.expenses, currency) : '—'}</div>
+                <div className="card-meta">Expenses</div>
               </div>
               <div className="mt-2">
                 {typeof aggregates?.income === 'number' && (aggregates!.income as number) > 0 ? (
@@ -481,7 +481,7 @@ export default function Dashboard() {
           <div className="xl:col-span-4">
             <Card className="p-3 min-h-[280px]">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-sm text-gray-600 font-medium">Action plan</div>
+                <div className="card-section-title">Action plan</div>
               </div>
               <ActionPlan recs={recs} kpis={kpis} />
             </Card>
