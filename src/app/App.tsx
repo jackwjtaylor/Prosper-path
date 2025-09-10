@@ -449,34 +449,32 @@ function App() {
   return (
     <div className="text-base flex flex-col h-screen bg-app text-foreground">
       {/* Header */}
-      <div className="p-5 text-lg font-semibold flex justify-between items-center max-w-7xl mx-auto w-full relative border-b border-background bg-background backdrop-blur">
-        <Link href="/home" className="flex items-center">
-          <Image src="2D76K394.eps.svg" alt="Prosper Logo" width={20} height={20} className="mr-2" />
-          <span>Prosper AI <span className="text-gray-400">your personal wealth coach</span></span>
-        </Link>
-        <nav className="hidden md:flex items-center gap-6 text-sm">
-          <Link
-            href="/feedback"
-            className="h-8 px-3 inline-flex items-center gap-2 rounded-lg border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 text-xs shadow-sm"
-          >
-            Give Feedback
+      <div className="px-2 py-3 max-w-7xl mx-auto w-full">
+        <div className="nav-shell text-lg font-semibold flex justify-between items-center">
+          <Link href="/home" className="flex items-center">
+            <Image src="2D76K394.eps.svg" alt="Prosper Logo" width={20} height={20} className="mr-2" />
+            <span>Prosper AI <span className="text-gray-500">your personal wealth coach</span></span>
           </Link>
-        </nav>
-        <div className="flex items-center gap-2">
+          <nav className="hidden md:flex items-center gap-6 text-sm">
+            <Link
+              href="/feedback"
+              className="btn-cta btn-pill h-8 leading-none inline-flex items-center gap-2 text-xs shadow-sm"
+            >
+              Give Feedback
+            </Link>
+          </nav>
+          <div className="flex items-center gap-2">
           {/* Free uses chip (non-premium only) */}
           {entitlements?.plan !== 'premium' && typeof usage?.remaining === 'number' && (
-            <div
-              className={`text-xs shrink-0 ${Math.max(0, Number(usage?.remaining ?? 0)) <= 3 ? 'text-red-600' : 'text-gray-600'}`}
-              title="Free uses remaining"
-            >
-              Free uses left: <b>{Math.max(0, Number(usage?.remaining ?? 0))}</b>
+            <div className="chip shrink-0" title="Free uses remaining">
+              Free uses: <b>{Math.max(0, Number(usage?.remaining ?? 0))}</b>
             </div>
           )}
 
           {/* My Data / Dashboard toggle (same size as Upgrade) */}
           <button
             type="button"
-            className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border border-border bg-card hover:opacity-90 text-xs shadow-sm shrink-0"
+            className="btn-outline btn-pill h-8 inline-flex items-center gap-2 text-xs shadow-sm shrink-0"
             onClick={() => { try { window.dispatchEvent(new CustomEvent('pp:open_user_data')); } catch {} }}
             title="View and edit the data used for your calculations"
           >
@@ -503,7 +501,7 @@ function App() {
                   if (j?.url) window.location.href = j.url;
                 } catch {}
               }}
-              className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border border-border bg-card hover:opacity-90 text-xs shadow-sm"
+              className="btn-outline btn-pill h-8 inline-flex items-center gap-2 text-xs shadow-sm"
             >
               Manage plan
             </button>
@@ -519,7 +517,7 @@ function App() {
                   if (j?.url) window.location.href = j.url;
                 } catch {}
               }}
-              className="h-8 px-2.5 inline-flex items-center gap-2 rounded-lg border bg-gray-900 text-white hover:bg-gray-800 text-xs shadow-sm"
+              className="btn-cta btn-pill h-8 inline-flex items-center gap-2 text-xs shadow-sm"
             >
               Upgrade
             </button>
@@ -557,12 +555,13 @@ function App() {
             </span>
           </button>
 
-          <ThemeToggle />
-          <ProfileMenu
-            householdId={householdId}
-            entitlements={entitlements}
-            household={householdInfo}
-          />
+            <ThemeToggle />
+            <ProfileMenu
+              householdId={householdId}
+              entitlements={entitlements}
+              household={householdInfo}
+            />
+          </div>
         </div>
       </div>
 

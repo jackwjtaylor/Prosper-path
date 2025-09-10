@@ -26,7 +26,7 @@ export default function ChatPanel({ userText, setUserText, onSendMessage, onTogg
     <div className="min-w-0 flex flex-col gap-3 h-full min-h-0">
       {/* Integrated header: connection + mic status */}
       <div className="sticky top-0 z-10">
-        <div className="backdrop-blur bg-card border border-border rounded-xl px-3 py-2 shadow-sm mb-4">
+        <div className="nav-shell shadow-sm mb-4">
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={onToggleConnection}

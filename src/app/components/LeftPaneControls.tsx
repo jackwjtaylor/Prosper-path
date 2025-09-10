@@ -29,7 +29,7 @@ export default function LeftPaneControls({
 
   return (
     <div className="sticky top-0 z-10">
-      <div className="backdrop-blur bg-card border border-border rounded-xl px-3 py-2 shadow-sm">
+      <div className="nav-shell shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={onToggleConnection}

@@ -585,7 +585,7 @@ export default function Dashboard() {
 
 /** Small card wrapper for consistent styling */
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`bg-card rounded-xl shadow-sm h-full flex flex-col ${className}`}>{children}</div>;
+  return <div className={`panel-24 shadow-sm h-full flex flex-col ${className}`}>{children}</div>;
 }
 
 function V2KpiBar({
