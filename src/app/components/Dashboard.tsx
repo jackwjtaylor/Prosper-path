@@ -600,6 +600,14 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
   const [dismissedTitles, setDismissedTitles] = React.useState<string[]>([]);
   const [completedIds, setCompletedIds] = React.useState<string[]>([]);
   const [dismissedIds, setDismissedIds] = React.useState<string[]>([]);
+  // Confetti across the dashboard when marking done
+  const [confettiOn, setConfettiOn] = React.useState(false);
+  const [confettiKey, setConfettiKey] = React.useState(0);
+  const triggerConfetti = React.useCallback(() => {
+    setConfettiKey((k) => k + 1);
+    setConfettiOn(true);
+    setTimeout(() => setConfettiOn(false), 1800);
+  }, []);
   React.useEffect(() => {
     (async () => {
       try {
@@ -787,8 +795,8 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
     const t = it.title.toString().toLowerCase();
     return dismissedTitles.includes(t);
   };
-  let uncompleted = deduped.filter((it) => !isCompleted(it) && !isDismissed(it));
-  uncompleted = uncompleted.sort((a, b) => {
+  let visible = deduped.filter((it) => !isDismissed(it));
+  visible = visible.sort((a, b) => {
     const aRec = recIds.has(a.action_id || '');
     const bRec = recIds.has(b.action_id || '');
     if (aRec !== bRec) return aRec ? -1 : 1;
@@ -804,11 +812,11 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
     ];
     const pinned: any[] = [];
     for (const id of pinnedOrder) {
-      const it = uncompleted.find((u) => (u.action_id || '') === id);
+      const it = visible.find((u) => (u.action_id || '') === id);
       if (it) pinned.push(it);
     }
-    const remainder = uncompleted.filter((u) => !pinnedOrder.includes((u.action_id || '')));
-    uncompleted = [...pinned, ...remainder];
+    const remainder = visible.filter((u) => !pinnedOrder.includes((u.action_id || '')));
+    visible = [...pinned, ...remainder];
   }
   const completedFromRecs = deduped.filter((it) => isCompleted(it) && !isDismissed(it));
   const completedExtra = completedItems.filter((it) => {
@@ -825,6 +833,7 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
       setCompletedTitles((prev) => Array.from(new Set([...prev, title.toLowerCase()])));
       if (action_id) setCompletedIds((prev) => Array.from(new Set([...prev, action_id])));
       setCompletedItems((prev) => [{ id: Math.random().toString(36).slice(2), title, completed_at: new Date().toISOString() }, ...prev]);
+      triggerConfetti();
     } catch {}
   };
 
@@ -838,68 +847,7 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
     } catch {}
   };
 
-  const Item = ({
-    action_id, title, how, relevant, reason, completed,
-  }: { action_id?: string; title: string; how: any; relevant: boolean; reason: string; completed?: boolean }) => (
-    <div className={`border rounded-md p-2 ${relevant ? 'bg-white' : 'bg-gray-50'}`}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className={`text-sm font-medium truncate ${relevant ? 'text-gray-800' : 'text-gray-500'}`}>
-            {title} {recIds.has(action_id || '') ? (<span className="ml-2 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1 py-0.5 rounded">Recommended</span>) : null}
-            {completed && <span className="ml-2 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">Completed</span>}
-          </div>
-          {/* Temporary relevance reason for robustness testing */}
-          <div className={`text-[11px] mt-0.5 ${relevant ? 'text-gray-600' : 'text-gray-500'}`}>{reason}</div>
-          {how && (
-            <div className="text-[11px] text-gray-800 mt-1">
-              {Array.isArray(how) ? (
-                <ul className="list-disc pl-4 space-y-0.5">{how.map((h: any, j: number) => <li key={j}>{String(h)}</li>)}</ul>
-              ) : String(how)}
-            </div>
-          )}
-        </div>
-        <div className="shrink-0 flex flex-col gap-1">
-          {!completed ? (
-            <>
-              <button
-                className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
-                onClick={() => {
-                  const prompt = typeof how === 'string' ? how : Array.isArray(how) ? how.join('\n') : title;
-                  const text = `Can you help me with: ${title}?\n${prompt}`;
-                  try { window.dispatchEvent(new CustomEvent('pp:open_chat', { detail: { text } })); } catch {}
-                }}
-              >
-                Open in chat
-              </button>
-              <button
-                className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
-                onClick={() => markDone(title, action_id)}
-              >
-                Mark done
-              </button>
-              <button
-                className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
-                onClick={() => dismiss(title, action_id)}
-                title="Remove from plan"
-              >
-                Remove
-              </button>
-            </>
-          ) : (
-            <button
-              className="text-xs px-2 py-1 rounded border bg-white hover:bg-gray-50"
-              onClick={() => {
-                const text = `I completed: ${title}. What should I do next?`;
-                try { window.dispatchEvent(new CustomEvent('pp:open_chat', { detail: { text } })); } catch {}
-              }}
-            >
-              Ask what’s next
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  // Legacy item markup removed (ActionCard is used exclusively)
 
   // New ActionItem using ActionCard UI
   const ActionItem = ({ action_id, title, how, relevant, reason, completed }: { action_id?: string; title: string; how: any; relevant: boolean; reason: string; completed?: boolean }) => (
@@ -912,14 +860,13 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
       onOpenChat={() => {
         const prompt = typeof how === 'string' ? how : Array.isArray(how) ? how.join('\n') : title;
         const text = !completed ? `Can you help me with: ${title}?\n${prompt}` : `I completed: ${title}. What should I do next?`;
-        try { window.dispatchEvent(new CustomEvent('pp:open_chat', { detail: { text } })); } catch {}
+        try { window.dispatchEvent(new CustomEvent('pp:send_chat', { detail: { text } })); } catch {}
       }}
       onDone={!completed ? (() => markDone(title, action_id)) : undefined}
-      onDismiss={!completed ? (() => dismiss(title, action_id)) : undefined}
     />
   );
 
-  if ((!uncompleted || uncompleted.length === 0) && (!completedFromRecs || completedFromRecs.length === 0) && (!completedExtra || completedExtra.length === 0)) {
+  if ((!visible || visible.length === 0) && (!completedExtra || completedExtra.length === 0)) {
     return <div className="text-sm text-gray-500">No actions yet. Provide more info in chat to unlock your plan.</div>;
   }
 
@@ -935,23 +882,35 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
 
   return (
     <div className="space-y-3">
+      {/* Confetti overlay */}
+      {confettiOn && (
+        <div key={confettiKey} className="fixed inset-0 pointer-events-none z-[9999] overflow-hidden">
+          <style jsx global>{`
+            @keyframes confetti-fall { 0% { transform: translate3d(0,-100vh,0) rotate(0deg); opacity: 1; } 100% { transform: translate3d(0,100vh,0) rotate(720deg); opacity: 0; } }
+          `}</style>
+          {Array.from({ length: 80 }).map((_, i) => {
+            const left = Math.random() * 100;
+            const size = 6 + Math.random() * 6;
+            const duration = 1.2 + Math.random() * 0.9;
+            const delay = Math.random() * 0.25;
+            const colors = ['#ef4444','#10b981','#3b82f6','#f59e0b','#a855f7'];
+            const color = colors[i % colors.length];
+            const style: React.CSSProperties = { position: 'absolute', left: `${left}%`, top: '-10%', width: `${size}px`, height: `${size * 0.6}px`, backgroundColor: color, borderRadius: '2px', transform: 'translate3d(0,0,0)', animation: `confetti-fall ${duration}s ease-out ${delay}s forwards` };
+            return <span key={i} style={style} />;
+          })}
+        </div>
+      )}
       {(completedFromRecs.length + completedExtra.length) > 0 && (
         <div className="flex items-center justify-end">
           <button className="text-xs underline text-gray-600 hover:text-gray-800" onClick={removeAllCompleted}>Remove all completed</button>
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        {uncompleted.map((r) => (
-          <ActionItem key={`u-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} />
+        {visible.map((r) => (
+          <ActionItem key={`u-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} completed={isCompleted(r)} />
         ))}
       </div>
-      {completedFromRecs.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {completedFromRecs.map((r) => (
-            <ActionItem key={`c-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} completed />
-          ))}
-        </div>
-      )}
+      {/* Completed items remain inline above with a badge */}
       {completedExtra.length > 0 && (
         <div className="pt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
           {completedExtra.map((it) => (
@@ -968,17 +927,10 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
                 className="text-xs px-2 py-1 rounded border border-border bg-card hover:opacity-90"
                 onClick={() => {
                   const text = `I completed: ${it.title}. What should I do next?`;
-                  try { window.dispatchEvent(new CustomEvent('pp:open_chat', { detail: { text } })); } catch {}
+                  try { window.dispatchEvent(new CustomEvent('pp:send_chat', { detail: { text } })); } catch {}
                 }}
               >
                 Ask what’s next
-              </button>
-              <button
-                className="ml-2 text-xs px-2 py-1 rounded border border-border bg-card hover:opacity-90"
-                onClick={() => dismiss(it.title || '')}
-                title="Remove from plan"
-              >
-                Remove
               </button>
             </div>
           ))}

@@ -39,14 +39,12 @@ export default function ActionCard({ title, why, steps, recommended, completed, 
           {!completed ? (
             <>
               {onOpenChat && (
-                <button className="text-xs px-2 py-1 rounded border bg-card hover:bg-white" onClick={onOpenChat}>Open in chat</button>
+                <button className="text-xs px-2 py-1 rounded border bg-card hover:bg-white" onClick={onOpenChat}>Explain</button>
               )}
               {onDone && (
                 <button className="text-xs px-2 py-1 rounded border bg-card hover:bg-white" onClick={onDone}>Mark done</button>
               )}
-              {onDismiss && (
-                <button className="text-xs px-2 py-1 rounded border bg-card hover:bg-white" onClick={onDismiss} title="Remove from plan">Remove</button>
-              )}
+              {/* Remove button intentionally omitted */}
             </>
           ) : (
             onOpenChat ? (
@@ -58,4 +56,3 @@ export default function ActionCard({ title, why, steps, recommended, completed, 
     </div>
   );
 }
-

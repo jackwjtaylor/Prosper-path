@@ -424,6 +424,21 @@ function App() {
     return () => window.removeEventListener('pp:open_chat', handler as any);
   }, []);
 
+  // Allow other components to programmatically send a message (auto-send)
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      try {
+        const text = e?.detail?.text as string | undefined;
+        if (typeof text === 'string' && text.trim()) {
+          setActiveTab('chat');
+          sendSimulatedUserMessage(text.trim());
+        }
+      } catch {}
+    };
+    window.addEventListener('pp:send_chat', handler as any);
+    return () => window.removeEventListener('pp:send_chat', handler as any);
+  }, []);
+
   return (
     <div className="text-base flex flex-col h-screen bg-app text-foreground">
       {/* Header */}
