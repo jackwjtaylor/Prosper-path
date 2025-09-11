@@ -5,6 +5,7 @@ import { getSupabaseClient } from "@/app/lib/supabaseClient";
 import { getProsperLevelLabel } from "@/app/lib/prosperLevelLabels";
 import { normaliseCurrency } from "@/app/lib/validate";
 import { normaliseSlots } from "@/app/lib/normalise";
+import { DEFAULTS } from "@/app/lib/config";
 import BenchmarksCard from "@/app/components/BenchmarksCard";
 import TopVoiceControls from "@/app/components/TopVoiceControls";
 import LevelPill from "@/app/components/ui/LevelPill";
@@ -207,6 +208,8 @@ export default function Dashboard() {
     return "AUD";
   }, [latest]);
 
+  
+
   // Helper to format KPI values consistently
   const fmtKpi = React.useCallback((format: 'pct'|'months'|'ratio'|'num', v: number) => {
     if (!Number.isFinite(v)) return '—';
@@ -312,6 +315,64 @@ export default function Dashboard() {
       return null;
     }
   }, [latest]);
+
+  // Finance-based net worth forecast: project 12 months from current financials and growth
+  const forecastSeries = React.useMemo(() => {
+    try {
+      if (!series || series.length < 1) return [] as SeriesPoint[];
+      const end = series[series.length - 1];
+      const nw0 = Number(end?.value || 0);
+      if (!Number.isFinite(nw0) || !end?.ts) return [];
+
+      // Derive monthly savings from income/expenses; fallback to savings rate
+      const slots = (latest as any)?.inputs?.slots;
+      let income = Number(aggregates?.income || 0);
+      let expenses = Number(aggregates?.expenses || 0);
+      let monthlySave = Number.isFinite(income) && Number.isFinite(expenses) && income > 0 ? Math.max(0, income - expenses) : 0;
+      if (!(monthlySave > 0)) {
+        const sr = Number(kpis?.sr);
+        if (Number.isFinite(sr) && income > 0) monthlySave = Math.max(0, sr * income);
+      }
+
+      // Investable base: use normalized investables if present else kpis.invnw * nw
+      let inv0: number | null = null;
+      try {
+        if (slots) {
+          const norm = normaliseSlots(slots as any);
+          inv0 = typeof norm.investable_assets === 'number' ? norm.investable_assets : null;
+        }
+      } catch {}
+      if (inv0 == null) {
+        const invnw = Number(kpis?.invnw);
+        inv0 = Number.isFinite(invnw) ? Math.max(0, invnw * nw0) : Math.max(0, nw0 * 0.4);
+      }
+
+      // Growth assumptions (real, annual → monthly)
+      let gAnnual = DEFAULTS.growth_real;
+      try {
+        const er = Number((slots as any)?.expected_return_annual?.value ?? (slots as any)?.assumed_return_annual?.value ?? (latest as any)?.inputs?.expected_return_annual);
+        if (Number.isFinite(er)) gAnnual = er;
+      } catch {}
+      const r = Math.pow(1 + gAnnual, 1 / 12) - 1;
+
+      const out: SeriesPoint[] = [];
+      let nw = nw0;
+      let inv = (inv0 as number) || 0;
+      const baseDate = new Date(end.ts);
+      const months = 12;
+      for (let i = 1; i <= months; i++) {
+        const growth = inv * r; // only investables grow
+        inv = inv + growth + monthlySave; // assume savings go to investables
+        nw = nw + growth + monthlySave;
+        const d = new Date(baseDate);
+        d.setUTCMonth(d.getUTCMonth() + i);
+        out.push({ ts: d.toISOString(), value: nw });
+      }
+      return out;
+    } catch {
+      return [] as SeriesPoint[];
+    }
+  }, [series, latest, aggregates, kpis]);
 
   // Details toggles for compact cards
   // Row 2 expansion: one toggle controls all four mini-cards
@@ -493,7 +554,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="mt-2 flex-1 min-h-[120px]">
-                <Sparkline points={series} size="fill" />
+                <Sparkline points={series} forecast={forecastSeries} size="fill" showAxis={true} showYAxis={true} currency={currency} />
               </div>
             </Card>
           </div>
