@@ -14,7 +14,33 @@ export default function Sparkline({ points, size = 'md' }: { points: SparkPoint[
     const norm = (v: number) => (max === min ? 0.5 : (v - min) / (max - min));
     const step = vals.length > 1 ? w / (vals.length - 1) : w;
     const coords = vals.map((v, i) => [i * step, h - norm(v) * h] as const);
-    const path = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x},${y}`).join(" ");
+
+    // Smooth curve using a simple Catmull-Rom → cubic Bézier conversion
+    const C = (p0: readonly [number, number], p1: readonly [number, number], p2: readonly [number, number], p3: readonly [number, number], t = 0.5) => {
+      const d1x = (p2[0] - p0[0]) * t, d1y = (p2[1] - p0[1]) * t;
+      const d2x = (p3[0] - p1[0]) * t, d2y = (p3[1] - p1[1]) * t;
+      const cp1: [number, number] = [p1[0] + d1x / 3, p1[1] + d1y / 3];
+      const cp2: [number, number] = [p2[0] - d2x / 3, p2[1] - d2y / 3];
+      return { cp1, cp2 };
+    };
+
+    let path = '';
+    if (coords.length === 1) {
+      const [x, y] = coords[0];
+      path = `M${x},${y}`;
+    } else if (coords.length === 2) {
+      path = `M${coords[0][0]},${coords[0][1]} L${coords[1][0]},${coords[1][1]}`;
+    } else {
+      path = `M${coords[0][0]},${coords[0][1]}`;
+      for (let i = 0; i < coords.length - 1; i++) {
+        const p0 = coords[Math.max(0, i - 1)];
+        const p1 = coords[i];
+        const p2 = coords[i + 1];
+        const p3 = coords[Math.min(coords.length - 1, i + 2)];
+        const { cp1, cp2 } = C(p0, p1, p2, p3, 0.5);
+        path += ` C${cp1[0]},${cp1[1]} ${cp2[0]},${cp2[1]} ${p2[0]},${p2[1]}`;
+      }
+    }
     const areaPath = `${path} L ${w},${h} L 0,${h} Z`;
     return { d: path, areaD: areaPath };
   }, [points]);
@@ -46,7 +72,7 @@ export default function Sparkline({ points, size = 'md' }: { points: SparkPoint[
         </linearGradient>
       </defs>
       <path d={areaD} fill="url(#slope)" />
-      <path d={d} fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

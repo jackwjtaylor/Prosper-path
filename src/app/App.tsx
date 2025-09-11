@@ -432,19 +432,25 @@ function App() {
   }, []);
 
   // Allow other components to programmatically send a message (auto-send)
+  // Use the SDK helper so the agent responds in voice as well as text.
   useEffect(() => {
     const handler = (e: CustomEvent) => {
       try {
         const text = e?.detail?.text as string | undefined;
         if (typeof text === 'string' && text.trim()) {
           setActiveTab('chat');
-          sendSimulatedUserMessage(text.trim());
+          interrupt();
+          try {
+            sendUserText(text.trim());
+            // Explicitly request a response so TTS/audio is produced.
+            sendEvent({ type: 'response.create' });
+          } catch {}
         }
       } catch {}
     };
     window.addEventListener('pp:send_chat', handler as any);
     return () => window.removeEventListener('pp:send_chat', handler as any);
-  }, []);
+  }, [sendUserText, sendEvent, interrupt]);
 
   return (
     <div className="text-base flex flex-col h-screen bg-app text-foreground">

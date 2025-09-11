@@ -95,6 +95,11 @@ export default function Dashboard() {
   const [showSavedToast, setShowSavedToast] = React.useState(false);
   const [showPremiumBanner, setShowPremiumBanner] = React.useState(false);
   const [showUserData, setShowUserData] = React.useState(false);
+  // Win celebration overlay with KPI deltas
+  const [impactMoment, setImpactMoment] = React.useState<null | {
+    title: string;
+    deltas: Array<{ key: string; label: string; from: number; to: number; format: 'pct'|'months'|'ratio'|'num' }>;
+  }>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -202,6 +207,93 @@ export default function Dashboard() {
     return "AUD";
   }, [latest]);
 
+  // Helper to format KPI values consistently
+  const fmtKpi = React.useCallback((format: 'pct'|'months'|'ratio'|'num', v: number) => {
+    if (!Number.isFinite(v)) return '—';
+    if (format === 'pct') return fmtPct(v);
+    if (format === 'months') return `${(Math.round(v * 10) / 10).toFixed(1)} mo`;
+    if (format === 'ratio') return String(Math.round(v * 100) / 100);
+    return String(Math.round(v));
+  }, []);
+
+  // Keep a ref to latest dashboard data for async diffing
+  const dataRef = React.useRef<DashboardPayload | null>(null);
+  React.useEffect(() => { dataRef.current = data; }, [data]);
+
+  // Celebrate a completed action: voice praise + KPI impact flash
+  const celebrateWin = React.useCallback(async (title: string) => {
+    try {
+      // Voice praise via agent
+      try {
+        const say = `Celebrate this win briefly (≤8 words): I just ${title}.`;
+        window.dispatchEvent(new CustomEvent('pp:send_chat', { detail: { text: say } }));
+      } catch {}
+
+      // Diff KPIs before/after a reload
+      const before = { ...(dataRef.current?.kpis || dataRef.current?.latestSnapshot?.kpis || {}) } as Record<string, any>;
+      // Fetch a fresh dashboard payload to diff KPIs immediately
+      let after: Record<string, any> = {};
+      try {
+        const headers: any = {};
+        try {
+          const supa = getSupabaseClient();
+          if (supa) {
+            const sessRes = await supa.auth.getSession();
+            const token = 'data' in (sessRes as any) ? (sessRes as any).data?.session?.access_token : undefined;
+            if (token) headers.Authorization = `Bearer ${token}`;
+          }
+        } catch {}
+        const id = householdId || (await ensureHouseholdId());
+        const res = await fetch(`/api/prosper/dashboard?householdId=${id}`, { cache: 'no-store', headers });
+        const json = await res.json();
+        after = (json?.kpis || json?.latestSnapshot?.kpis || {}) as Record<string, any>;
+        // Also refresh the main dashboard asynchronously
+        load();
+      } catch {
+        // Fall back to next regular refresh
+      }
+
+      const specs: Array<{ key: string; label: string; dir: 'higher'|'lower'; format: 'pct'|'months'|'ratio'|'num' }> = [
+        { key: 'sr', label: 'Savings rate', dir: 'higher', format: 'pct' },
+        { key: 'ef_months', label: 'Emergency buffer', dir: 'higher', format: 'months' },
+        { key: 'hr', label: 'Housing costs', dir: 'lower', format: 'pct' },
+        { key: 'dsr_total', label: 'Debt payments', dir: 'lower', format: 'pct' },
+        { key: 'nmdsr', label: 'Non‑mortgage payments', dir: 'lower', format: 'pct' },
+        { key: 'dti_stock', label: 'Debt vs income', dir: 'lower', format: 'ratio' },
+        { key: 'd_to_a', label: 'Debts vs assets', dir: 'lower', format: 'ratio' },
+        { key: 'rrr', label: 'Retirement readiness', dir: 'higher', format: 'ratio' },
+        { key: 'invnw', label: 'Investable share', dir: 'higher', format: 'pct' },
+        { key: 'pension_contrib_pct', label: 'Retirement contributions', dir: 'higher', format: 'pct' },
+      ];
+      const improvements: Array<{ key: string; label: string; from: number; to: number; format: 'pct'|'months'|'ratio'|'num' }> = [];
+      specs.forEach(s => {
+        const from = Number(before?.[s.key]);
+        const to = Number(after?.[s.key]);
+        if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return;
+        const movedTowardTarget = s.dir === 'higher' ? to > from : to < from;
+        if (movedTowardTarget) improvements.push({ key: s.key, label: s.label, from, to, format: s.format });
+      });
+      improvements.sort((a, b) => Math.abs(b.to - b.from) - Math.abs(a.to - a.from));
+      const top = improvements.slice(0, 2);
+
+      // Flash the affected KPI tiles
+      top.forEach((d, i) => {
+        try {
+          const el = document.getElementById(`kpi-${d.key}`);
+          if (!el) return;
+          const cls = (Number(d.to) > Number(d.from)) ? 'kpi-flash-up' : 'kpi-flash-down';
+          el.classList.add(cls);
+          setTimeout(() => { try { el.classList.remove(cls); } catch {} }, 1600 + i * 200);
+        } catch {}
+      });
+
+      if (top.length > 0) {
+        setImpactMoment({ title, deltas: top });
+        setTimeout(() => setImpactMoment(null), 3200);
+      }
+    } catch {}
+  }, [load, householdId]);
+
   // Normalized aggregates for first-row cards
   const aggregates = React.useMemo(() => {
     try {
@@ -222,9 +314,8 @@ export default function Dashboard() {
   }, [latest]);
 
   // Details toggles for compact cards
-  const [showLevelDetails, setShowLevelDetails] = React.useState(false);
-  const [showALDetails, setShowALDetails] = React.useState(false);
-  const [showIEDetails, setShowIEDetails] = React.useState(false);
+  // Row 2 expansion: one toggle controls all four mini-cards
+  const [row2Expanded, setRow2Expanded] = React.useState(false);
   // Friendly name if needed in future (unused in current UI)
   /* const name: string | null = React.useMemo(() => {
     const inputs = (latest as any)?.inputs || {};
@@ -310,8 +401,32 @@ export default function Dashboard() {
   return (
     <>
     <div className="w-full h-full">
+      {/* Global KPI flash helpers */}
+      <style jsx global>{`
+        @keyframes kpiFlashUp { 0% { background: rgba(16,185,129,0.20); } 100% { background: transparent; } }
+        @keyframes kpiFlashDown { 0% { background: rgba(239,68,68,0.20); } 100% { background: transparent; } }
+        .kpi-flash-up { animation: kpiFlashUp 1200ms ease-out; border-radius: 8px; }
+        .kpi-flash-down { animation: kpiFlashDown 1200ms ease-out; border-radius: 8px; }
+      `}</style>
       {/* Top-center voice controls to emphasize voice-first UX */}
       <TopVoiceControls />
+      {/* Impact moment: show immediate KPI changes after a win */}
+      {impactMoment && (
+        <div className="fixed top-16 right-3 z-[10000]">
+          <div className="rounded-lg border border-emerald-200 bg-white shadow-lg p-3 w-80">
+            <div className="text-sm font-semibold text-emerald-700">Nice win!</div>
+            <div className="text-xs text-gray-600 truncate" title={impactMoment.title}>{impactMoment.title}</div>
+            <ul className="mt-2 space-y-1">
+              {impactMoment.deltas.map((d) => (
+                <li key={d.key} className="text-xs flex items-center justify-between gap-2">
+                  <span className="text-gray-600">{d.label}</span>
+                  <span className="font-medium text-emerald-700">{fmtKpi(d.format, d.from)} → {fmtKpi(d.format, d.to)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
       {showPremiumBanner && (
         <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
           Premium unlocked — thanks for supporting Prosper! Your full history and premium features are enabled.
@@ -399,15 +514,15 @@ export default function Dashboard() {
             <Card className="p-3 min-h-[120px] relative">
               <button
                 className="absolute top-2 right-2 h-6 w-6 rounded-full border border-border bg-card text-muted flex items-center justify-center hover:opacity-90"
-                aria-label={showLevelDetails ? 'Hide details' : 'Show details'}
-                title={showLevelDetails ? 'Hide details' : 'Show details'}
-                onClick={() => setShowLevelDetails(v => !v)}
+                aria-label={row2Expanded ? 'Hide details' : 'Show details'}
+                title={row2Expanded ? 'Hide details' : 'Show details'}
+                onClick={() => setRow2Expanded(v => !v)}
               >
-                <span className="text-xs">{showLevelDetails ? '−' : '+'}</span>
+                <span className="text-xs">{row2Expanded ? '−' : '+'}</span>
               </button>
               <div className="flex items-start justify-between">
                 <div className="min-w-0">
-                  <div className="card-label">Level</div>
+                  <div className="card-label">Prosper Level</div>
                   <div className="flex items-center gap-3 mt-1">
                     <LevelPill level={overallIdx} />
                     <div className="card-value text-lg truncate">{overallLevelLabel}</div>
@@ -415,9 +530,28 @@ export default function Dashboard() {
                   <div className="card-meta mt-1">{LEVEL_DESCRIPTIONS[overallIdx - 1]}</div>
                 </div>
               </div>
-              {showLevelDetails && (
-                <div className="mt-2 card-meta">
-                  Next: Level {Math.min(10, overallIdx + 1)} — {LEVEL_SHORT_NAMES[Math.min(9, overallIdx)]}.
+              {row2Expanded && (
+                <div className="mt-2">
+                  <div className="text-[11px] text-gray-600 mb-1">Levels ladder</div>
+                  <ol className="space-y-0.5 max-h-40 overflow-auto pr-1">
+                    {Array.from({ length: 10 }, (_, i) => 10 - i).map((levelNum) => {
+                      const name = LEVEL_SHORT_NAMES[levelNum - 1];
+                      const desc = LEVEL_DESCRIPTIONS[levelNum - 1];
+                      const isCurrent = levelNum === overallIdx;
+                      const isNext = levelNum === Math.min(10, overallIdx + 1);
+                      return (
+                        <li key={name} className={`flex items-start gap-1.5 p-1 rounded ${isCurrent ? 'bg-emerald-50 border border-emerald-200' : ''}`}>
+                          <span className={`shrink-0 inline-flex items-center justify-center h-5 w-5 rounded-full text-[10px] ${isCurrent ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-700'}`} title={`Level ${levelNum}`}>{levelNum}</span>
+                          <div className="min-w-0">
+                            <div className="text-[11px] font-medium text-foreground">
+                              {name} {isCurrent ? <span className="ml-1 text-[10px] font-normal text-emerald-700">(You)</span> : isNext ? <span className="ml-1 text-[10px] font-normal text-gray-500">Next</span> : null}
+                            </div>
+                            <div className="text-[10px] text-gray-600 truncate">{desc}</div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
                 </div>
               )}
             </Card>
@@ -425,7 +559,7 @@ export default function Dashboard() {
 
           {/* 2) People like you (benchmarks, span 1) */}
           <div className="xl:col-span-1">
-            <BenchmarksCard latest={latest} kpis={kpis} className="h-full min-h-[120px] flex flex-col" />
+            <BenchmarksCard latest={latest} kpis={kpis} className="h-full min-h-[120px] flex flex-col" expanded={row2Expanded} onToggle={(n) => setRow2Expanded(n)} />
           </div>
 
           {/* 3) Assets / Liabilities totals (span 1) with mini chart */}
@@ -433,11 +567,11 @@ export default function Dashboard() {
             <Card className="p-3 min-h-[120px] relative">
               <button
                 className="absolute top-2 right-2 h-6 w-6 rounded-full border border-border bg-card text-muted flex items-center justify-center hover:opacity-90"
-                aria-label={showALDetails ? 'Hide details' : 'Show details'}
-                title={showALDetails ? 'Hide details' : 'Show details'}
-                onClick={() => setShowALDetails(v => !v)}
+                aria-label={row2Expanded ? 'Hide details' : 'Show details'}
+                title={row2Expanded ? 'Hide details' : 'Show details'}
+                onClick={() => setRow2Expanded(v => !v)}
               >
-                <span className="text-xs">{showALDetails ? '−' : '+'}</span>
+                <span className="text-xs">{row2Expanded ? '−' : '+'}</span>
               </button>
               <div className="card-label">Assets / Liabilities</div>
               <div className="mt-1 flex items-baseline gap-3">
@@ -468,7 +602,7 @@ export default function Dashboard() {
                   <div className="text-[11px] text-muted">Add assets and debts to compute totals</div>
                 )}
               </div>
-              {showALDetails && (
+              {row2Expanded && (
                 <div className="mt-2 card-meta">
                   {typeof aggregates?.assets === 'number' && (
                     <>
@@ -478,6 +612,65 @@ export default function Dashboard() {
                       )}
                     </>
                   )}
+                  {/* Composition stacked bars */}
+                  {(() => {
+                    const slots = (latest as any)?.inputs?.slots || {};
+                    const num = (k: string) => {
+                      const v = Number(slots?.[k]?.value);
+                      return Number.isFinite(v) ? Math.max(0, v) : 0;
+                    };
+                    const A = {
+                      Cash: num('cash_liquid_total'),
+                      Investments: num('investments_ex_home_total') + num('pension_balance_total'),
+                      Home: num('home_value'),
+                    };
+                    const L = {
+                      Mortgage: num('mortgage_balance'),
+                      'Other debt': num('other_debt_balances_total'),
+                    };
+                    const sumA = Object.values(A).reduce((a, b) => a + b, 0);
+                    const sumL = Object.values(L).reduce((a, b) => a + b, 0);
+                    const colorsA = ['#60a5fa', '#10b981', '#f59e0b'];
+                    const colorsL = ['#ef4444', '#8b5cf6'];
+                    return (
+                      <div className="mt-3 space-y-2">
+                        <div className="text-[11px] text-gray-600">Assets breakdown</div>
+                        {sumA > 0 ? (
+                          <div className="w-full">
+                            <div className="h-4 w-full rounded bg-gray-200 overflow-hidden flex">
+                              {Object.entries(A).map(([k, v], i) => (
+                                <div key={k} className="h-full" style={{ width: `${Math.round((v / Math.max(sumA, 1e-9)) * 100)}%`, backgroundColor: colorsA[i % colorsA.length] }} title={`${k}: ${fmtCurrency(v, currency)}`} />
+                              ))}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-gray-600">
+                              {Object.entries(A).map(([k, v], i) => (
+                                <span key={k} className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded" style={{ backgroundColor: colorsA[i % colorsA.length] }} />{k}</span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-gray-500">Add cash, investments, and home value to see a breakdown.</div>
+                        )}
+                        <div className="text-[11px] text-gray-600 mt-2">Liabilities breakdown</div>
+                        {sumL > 0 ? (
+                          <div className="w-full">
+                            <div className="h-4 w-full rounded bg-gray-200 overflow-hidden flex">
+                              {Object.entries(L).map(([k, v], i) => (
+                                <div key={k} className="h-full" style={{ width: `${Math.round((v / Math.max(sumL, 1e-9)) * 100)}%`, backgroundColor: colorsL[i % colorsL.length] }} title={`${k}: ${fmtCurrency(v, currency)}`} />
+                              ))}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-gray-600">
+                              {Object.keys(L).map((k, i) => (
+                                <span key={k} className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded" style={{ backgroundColor: colorsL[i % colorsL.length] }} />{k}</span>
+                                ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-gray-500">Add mortgage and other debts to see a breakdown.</div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </Card>
@@ -488,11 +681,11 @@ export default function Dashboard() {
             <Card className="p-3 min-h-[120px] relative">
               <button
                 className="absolute top-2 right-2 h-6 w-6 rounded-full border border-border bg-card text-muted flex items-center justify-center hover:opacity-90"
-                aria-label={showIEDetails ? 'Hide details' : 'Show details'}
-                title={showIEDetails ? 'Hide details' : 'Show details'}
-                onClick={() => setShowIEDetails(v => !v)}
+                aria-label={row2Expanded ? 'Hide details' : 'Show details'}
+                title={row2Expanded ? 'Hide details' : 'Show details'}
+                onClick={() => setRow2Expanded(v => !v)}
               >
-                <span className="text-xs">{showIEDetails ? '−' : '+'}</span>
+                <span className="text-xs">{row2Expanded ? '−' : '+'}</span>
               </button>
               <div className="card-label">Income / Expenses (monthly)</div>
               <div className="mt-1 flex items-baseline gap-3">
@@ -523,7 +716,7 @@ export default function Dashboard() {
                   <div className="text-[11px] text-muted">Add income and expenses to compute totals</div>
                 )}
               </div>
-              {showIEDetails && (
+              {row2Expanded && (
                 <div className="mt-2 card-meta">
                   {typeof aggregates?.income === 'number' && (
                     <>
@@ -533,6 +726,34 @@ export default function Dashboard() {
                       )}
                     </>
                   )}
+                  {/* Donut pie chart illustrating savings vs expenses */}
+                  {(() => {
+                    const income = Number(aggregates?.income || 0);
+                    const expenses = Math.max(0, Number(aggregates?.expenses || 0));
+                    if (!Number.isFinite(income) || income <= 0) return null;
+                    const savings = Math.max(0, income - expenses);
+                    const s = Math.max(0, Math.min(1, savings / Math.max(income, 1e-9)));
+                    const e = 1 - s;
+                    const size = 110;
+                    const r = 38; const cx = size / 2; const cy = size / 2; const c = 2 * Math.PI * r;
+                    const dashS = c * s; const dashE = c * e;
+                    return (
+                      <div className="mt-2 flex items-center gap-3">
+                        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-label="Savings vs expenses">
+                          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e5e7eb" strokeWidth="12" />
+                          {/* Expenses arc (red) */}
+                          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#ef4444" strokeWidth="12" strokeDasharray={`${dashE} ${c - dashE}`} transform={`rotate(-90 ${cx} ${cy})`} />
+                          {/* Savings arc (emerald), offset after expenses */}
+                          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#10b981" strokeWidth="12" strokeDasharray={`${dashS} ${c - dashS}`} strokeDashoffset={-dashE} transform={`rotate(-90 ${cx} ${cy})`} />
+                          <circle cx={cx} cy={cy} r={r-14} fill="white" />
+                        </svg>
+                        <div className="text-[11px] text-gray-700 space-y-0.5">
+                          <div><span className="inline-block h-2 w-2 rounded mr-1" style={{ backgroundColor: '#ef4444' }} />Expenses: <b>{fmtCurrency(expenses, currency)}</b></div>
+                          <div><span className="inline-block h-2 w-2 rounded mr-1" style={{ backgroundColor: '#10b981' }} />Savings: <b>{fmtCurrency(savings, currency)}</b></div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </Card>
@@ -544,7 +765,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-2">
                 <div className="card-section-title">Action plan</div>
               </div>
-              <ActionPlan recs={recs} kpis={kpis} />
+              <ActionPlan recs={recs} kpis={kpis} onWin={celebrateWin} />
             </Card>
           </div>
 
@@ -654,7 +875,7 @@ function V2KpiBar({
 // Removed unused NextActions component
 
 
-function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
+function ActionPlan({ recs, kpis, onWin }: { recs: any; kpis: any; onWin?: (title: string) => void }) {
   const [householdId, setHouseholdId] = React.useState<string>("");
   const [completedItems, setCompletedItems] = React.useState<{ id: string; title?: string; completed_at?: string }[]>([]);
   const [completedTitles, setCompletedTitles] = React.useState<string[]>([]);
@@ -664,58 +885,98 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
   // Confetti across the dashboard when marking done
   const [confettiOn, setConfettiOn] = React.useState(false);
   const [confettiKey, setConfettiKey] = React.useState(0);
-  // Upgraded "ding" celebration (Web Audio): quick triad + soft hiss
+  // Upgraded celebration chime (Web Audio): bright major arpeggio + sparkle
   const playDing = React.useCallback(() => {
     try {
       const AC: any = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (!AC) return;
       const ctx = new AC();
       const master = ctx.createGain();
-      master.gain.value = 0.6;
+      master.gain.value = 0.8;
+
+      // Subtle room reverb for organic feel
+      const convolver = ctx.createConvolver();
+      const impulseDur = 0.9;
+      const impulse = ctx.createBuffer(2, Math.floor(ctx.sampleRate * impulseDur), ctx.sampleRate);
+      for (let ch = 0; ch < impulse.numberOfChannels; ch++) {
+        const data = impulse.getChannelData(ch);
+        for (let i = 0; i < data.length; i++) {
+          // Exponentially decaying noise
+          data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 3) * 0.4;
+        }
+      }
+      convolver.buffer = impulse;
+
+      const wet = ctx.createGain(); wet.gain.value = 0.25;
+      const dry = ctx.createGain(); dry.gain.value = 0.9;
+      convolver.connect(wet);
+      dry.connect(master);
+      wet.connect(master);
       master.connect(ctx.destination);
 
       const now = ctx.currentTime;
-      const env = (time: number, g: GainNode, a = 0.005, d = 0.25) => {
+      const env = (time: number, g: GainNode, a = 0.003, d = 0.5) => {
         g.gain.cancelScheduledValues(time);
         g.gain.setValueAtTime(0.0001, time);
-        g.gain.exponentialRampToValueAtTime(0.6, time + a);
+        g.gain.exponentialRampToValueAtTime(0.75, time + a);
         g.gain.exponentialRampToValueAtTime(0.0001, time + d);
       };
 
-      // Musical triad A major (A5, C#6, E6)
-      const freqs = [880, 1108.73, 1318.51];
+      // Upward arpeggio in C major (C6, E6, G6), bell-like
+      const freqs = [1046.5, 1318.5, 1568.0];
       freqs.forEach((f, i) => {
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
-        osc.type = i === 0 ? 'triangle' : (i === 1 ? 'sine' : 'square');
+        osc.type = 'sine';
         osc.frequency.value = f;
+        // subtle chorus detune
+        osc.detune.value = i * 3;
+        const pan = ctx.createStereoPanner();
+        pan.pan.value = i === 0 ? -0.2 : i === 2 ? 0.2 : 0;
         osc.connect(g);
-        g.connect(master);
-        const start = now + i * 0.01; // tiny stagger
-        env(start, g, 0.006, 0.35 - i * 0.05);
+        g.connect(dry);
+        g.connect(convolver);
+        g.connect(pan);
+        pan.connect(dry);
+        pan.connect(convolver);
+        const start = now + i * 0.06; // rising arpeggio
+        env(start, g, 0.004, 0.55 - i * 0.08);
         osc.start(start);
-        osc.stop(start + 0.4);
+        osc.stop(start + 0.7);
       });
 
+      // Gentle shimmer overtones
+      const overtone = ctx.createOscillator();
+      const oGain = ctx.createGain();
+      overtone.type = 'triangle';
+      overtone.frequency.value = 2093; // C7
+      oGain.gain.value = 0.12;
+      overtone.connect(oGain);
+      oGain.connect(dry);
+      oGain.connect(convolver);
+      env(now + 0.08, oGain, 0.003, 0.4);
+      overtone.start(now + 0.08); overtone.stop(now + 0.48);
+
       // Soft high-pass noise burst for sparkle
-      const noiseDur = 0.12;
+      const noiseDur = 0.18;
       const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * noiseDur), ctx.sampleRate);
       const data = buffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.9;
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.7;
       const src = ctx.createBufferSource();
       src.buffer = buffer;
       const filt = ctx.createBiquadFilter();
       filt.type = 'highpass';
-      filt.frequency.value = 1200;
+      filt.frequency.value = 1500;
       const nGain = ctx.createGain();
-      nGain.gain.value = 0.15;
+      nGain.gain.value = 0.12;
       src.connect(filt);
       filt.connect(nGain);
-      nGain.connect(master);
+      nGain.connect(dry);
+      nGain.connect(convolver);
       src.start(now + 0.03);
       src.stop(now + 0.03 + noiseDur);
 
-      setTimeout(() => { try { ctx.close(); } catch {} }, 700);
+      setTimeout(() => { try { ctx.close(); } catch {} }, 1200);
     } catch {}
   }, []);
   const triggerConfetti = React.useCallback(() => {
@@ -806,14 +1067,18 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
   {
     const ef = K.ef_months as number | null | undefined;
     const rel = Number.isFinite(ef as number) ? ((ef as number) < 3) : false;
-    const reason = (ef == null) ? 'Missing inputs: essential expenses and liquid savings.' : (rel ? `EF ${fmt1(ef,'months')} < 3mo` : `EF ${fmt1(ef,'months')} meets ≥3mo`);
+    const reason = (ef == null)
+      ? 'Missing inputs: essential expenses and liquid savings.'
+      : (rel ? `Emergency buffer ${fmt1(ef,'months')} — below 3 months` : `Emergency buffer ${fmt1(ef,'months')} — at least 3 months`);
     push('SAVE_EMERGENCY_FUND_3M', 'Build emergency fund to 3 months', 'save', ['Open a high-yield savings bucket', 'Automate weekly transfer 5–10% of pay'], rel, reason);
   }
   // Non-mortgage DSR ≤ 10%
   {
     const nmdsr = K.nmdsr as number | null | undefined;
     const rel = Number.isFinite(nmdsr as number) ? (nmdsr as number) > 0.10 : false;
-    const reason = (nmdsr == null) ? 'Missing inputs: net income and non-mortgage debt payments.' : (rel ? `NMDSR ${fmt1(nmdsr)} > 10%` : `NMDSR ${fmt1(nmdsr)} ≤ 10%`);
+    const reason = (nmdsr == null)
+      ? 'Missing inputs: net income and non‑mortgage debt payments.'
+      : (rel ? `Non‑mortgage debt payments ${fmt1(nmdsr)} — above 10% of income` : `Non‑mortgage debt payments ${fmt1(nmdsr)} — within 10% target`);
     push('BORROW_NMDSR_LE_10PCT', 'Reduce non-mortgage debt servicing ≤ 10%', 'borrow', ['Consolidate high-APR balances', 'Automate overpayments on smallest balance'], rel, reason);
   }
   // Savings rate ≥ 20%
@@ -827,49 +1092,63 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
   {
     const hr = K.hr as number | null | undefined;
     const rel = Number.isFinite(hr as number) ? (hr as number) > 0.40 : false;
-    const reason = (hr == null) ? 'Missing inputs: income and rent/mortgage + running costs.' : (rel ? `Housing ratio ${fmt1(hr)} > 40%` : `Housing ratio ${fmt1(hr)} ≤ 40%`);
+    const reason = (hr == null)
+      ? 'Missing inputs: income and rent/mortgage + running costs.'
+      : (rel ? `Housing costs ${fmt1(hr)} of income — above 40%` : `Housing costs ${fmt1(hr)} of income — within 40% target`);
     push('SPEND_REDUCE_HOUSING_RATIO_40PCT', 'Reduce housing burden toward ≤ 40% of gross', 'spend', ['Negotiate rent/review utilities', 'Refinance or extend term if feasible', 'Trim 5–10% near term'], rel, reason);
   }
   // DSR total ≤ 20%
   {
     const dsr = K.dsr_total as number | null | undefined;
     const rel = Number.isFinite(dsr as number) ? (dsr as number) > 0.20 : false;
-    const reason = (dsr == null) ? 'Missing inputs: net income and all required debt payments.' : (rel ? `Total DSR ${fmt1(dsr)} > 20%` : `Total DSR ${fmt1(dsr)} ≤ 20%`);
+    const reason = (dsr == null)
+      ? 'Missing inputs: net income and all required debt payments.'
+      : (rel ? `Total debt payments ${fmt1(dsr)} of income — above 20%` : `Total debt payments ${fmt1(dsr)} of income — within 20%`);
     push('BORROW_REDUCE_DSR_TOTAL_20PCT', 'Lower total debt servicing toward ≤ 20% of income', 'borrow', ['Refinance to lower APR', 'Pause non‑essential spend', 'Redirect freed cash to highest APR'], rel, reason);
   }
   // Debt/Assets ≤ 0.60
   {
     const d2a = K.d_to_a as number | null | undefined;
     const rel = Number.isFinite(d2a as number) ? (d2a as number) > 0.60 : false;
-    const reason = (d2a == null) ? 'Missing inputs: total assets and liabilities.' : (rel ? `D/A ${fmt1(d2a,'ratio')} > 0.60` : `D/A ${fmt1(d2a,'ratio')} ≤ 0.60`);
+    const reason = (d2a == null)
+      ? 'Missing inputs: total assets and liabilities.'
+      : (rel ? `Debts vs assets ${fmt1(d2a,'ratio')} — above 0.60` : `Debts vs assets ${fmt1(d2a,'ratio')} — within 0.60`);
     push('BORROW_IMPROVE_DEBT_TO_ASSET_60PCT', 'Improve debt‑to‑asset ratio ≤ 0.60', 'borrow', ['Prioritise debt reduction', 'Avoid new large liabilities'], rel, reason);
   }
   // Liquid share of NW ≥ 15%
   {
     const lanw = K.lanw as number | null | undefined;
     const rel = Number.isFinite(lanw as number) ? (lanw as number) < 0.15 : false;
-    const reason = (lanw == null) ? 'Missing inputs: assets and liquid savings.' : (rel ? `LANW ${fmt1(lanw)} < 15%` : `LANW ${fmt1(lanw)} ≥ 15%`);
+    const reason = (lanw == null)
+      ? 'Missing inputs: assets and liquid savings.'
+      : (rel ? `Liquid share of net worth ${fmt1(lanw)} — below 15%` : `Liquid share of net worth ${fmt1(lanw)} — at least 15%`);
     push('SAVE_INCREASE_LIQUID_SHARE_15PCT', 'Lift liquid assets toward ≥ 15% of net worth', 'save', ['Hold part of new savings in cash/offset', 'Build buffer before investing further'], rel, reason);
   }
   // Investable share of NW ≥ 40%
   {
     const invnw = K.invnw as number | null | undefined;
     const rel = Number.isFinite(invnw as number) ? (invnw as number) < 0.40 : false;
-    const reason = (invnw == null) ? 'Missing inputs: net worth and investable assets.' : (rel ? `INVNW ${fmt1(invnw)} < 40%` : `INVNW ${fmt1(invnw)} ≥ 40%`);
+    const reason = (invnw == null)
+      ? 'Missing inputs: net worth and investable assets.'
+      : (rel ? `Investable share of net worth ${fmt1(invnw)} — below 40%` : `Investable share of net worth ${fmt1(invnw)} — at least 40%`);
     push('GROW_INCREASE_INVESTABLE_SHARE_40PCT', 'Increase investable share toward ≥ 40% of net worth', 'grow', ['Automate monthly investing', 'Rebalance annually to target mix'], rel, reason);
   }
   // Pension contributions ≥ 10%
   {
     const pc = K.pension_contrib_pct as number | null | undefined;
     const rel = Number.isFinite(pc as number) ? (pc as number) < 0.10 : false;
-    const reason = (pc == null) ? 'Missing inputs: pension contribution % or gross income.' : (rel ? `Pension contrib ${fmt1(pc)} < 10%` : `Pension contrib ${fmt1(pc)} ≥ 10%`);
+    const reason = (pc == null)
+      ? 'Missing inputs: retirement contribution % or gross income.'
+      : (rel ? `Retirement contributions ${fmt1(pc)} — below 10% of gross` : `Retirement contributions ${fmt1(pc)} — at least 10%`);
     push('GROW_RAISE_PENSION_CONTRIB_10PCT', 'Raise pension contributions to ≥ 10% of gross', 'grow', ['Increase salary sacrifice by 1–2%', 'Capture full employer match'], rel, reason);
   }
   // Retirement readiness ≥ 0.60
   {
     const rrr = K.rrr as number | null | undefined;
     const rel = Number.isFinite(rrr as number) ? (rrr as number) < 0.60 : false;
-    const reason = (rrr == null) ? 'Missing retirement inputs (age, target income, investables).' : (rel ? `RRR ${fmt1(rrr,'ratio')} < 0.60` : `RRR ${fmt1(rrr,'ratio')} ≥ 0.60`);
+    const reason = (rrr == null)
+      ? 'Missing retirement inputs (age, target income, investables).'
+      : (rel ? `Retirement on Track ${fmt1(rrr,'ratio')} — below 0.60× target` : `Retirement on Track ${fmt1(rrr,'ratio')} — at/above 0.60×`);
     push('GROW_IMPROVE_RRR_60PCT', 'Improve retirement readiness toward 60%+', 'grow', ['Increase contribution rate by 1–2%', 'Review target age or income'], rel, reason);
   }
   // Life cover ≥ 5y (only relevant if dependants)
@@ -953,6 +1232,7 @@ function ActionPlan({ recs, kpis }: { recs: any; kpis: any }) {
       if (action_id) setCompletedIds((prev) => Array.from(new Set([...prev, action_id])));
       setCompletedItems((prev) => [{ id: Math.random().toString(36).slice(2), title, completed_at: new Date().toISOString() }, ...prev]);
       triggerConfetti();
+      try { onWin && onWin(title); } catch {}
     } catch {}
   };
 
@@ -1534,13 +1814,13 @@ function KpiGrid({ kpis }: { kpis: any }) {
   const [filter, setFilter] = React.useState<'all'|'spend'|'save'|'borrow'|'protect'|'grow'>('all');
   const specs = [
     { label: 'Savings rate', key: 'sr', value: kpis?.sr, target: 0.20, dir: 'higher' as const, format: 'pct' as const, subtitle: 'Target ≥ 20%', tooltip: 'Shows cash left after expenses to fund goals.', pillar: 'save' },
-    { label: 'Emergency buffer', key: 'ef_months', value: kpis?.ef_months, target: 3, dir: 'higher' as const, format: 'months' as const, subtitle: 'Target ≥ 3 months (aim 6)', tooltip: 'Months your essentials are covered by cash.', pillar: 'save' },
+    { label: 'Emergency Buffer', key: 'ef_months', value: kpis?.ef_months, target: 3, dir: 'higher' as const, format: 'months' as const, subtitle: 'Target ≥ 3 months (aim 6)', tooltip: 'Months your essentials are covered by cash.', pillar: 'save' },
     { label: 'Housing costs (of income)', key: 'hr', value: kpis?.hr, target: 0.40, dir: 'lower' as const, format: 'pct' as const, subtitle: 'Target ≤ 40% (aim 35%)', tooltip: 'Checks housing isn’t over‑stretching income.', pillar: 'spend' },
     { label: 'Debt payments (of income)', key: 'dsr_total', value: kpis?.dsr_total, target: 0.20, dir: 'lower' as const, format: 'pct' as const, subtitle: 'Target ≤ 20%', tooltip: 'Total debt payment pressure.', pillar: 'borrow' },
     { label: 'Non‑mortgage debt payments', key: 'nmdsr', value: kpis?.nmdsr, target: 0.10, dir: 'lower' as const, format: 'pct' as const, subtitle: 'Target ≤ 10%', tooltip: 'Focus on credit cards and loans (not mortgage).', pillar: 'borrow' },
     { label: 'Total debt vs income', key: 'dti_stock', value: kpis?.dti_stock, target: 0.35, dir: 'lower' as const, format: 'ratio' as const, subtitle: 'Target ≤ 0.35', tooltip: 'Total debt compared to annual income.', pillar: 'borrow' },
     { label: 'Debts vs assets', key: 'd_to_a', value: kpis?.d_to_a, target: 0.60, dir: 'lower' as const, format: 'ratio' as const, subtitle: 'Target ≤ 0.60', tooltip: 'How your debts compare to your assets.', pillar: 'borrow' },
-    { label: 'Retirement readiness', key: 'rrr', value: kpis?.rrr, target: 0.60, dir: 'higher' as const, format: 'ratio' as const, subtitle: 'Target ≥ 0.60 (aim 1.00)', tooltip: 'Are you on track for your target retirement income?', pillar: 'grow' },
+    { label: 'Retirement on Track', key: 'rrr', value: kpis?.rrr, target: 0.60, dir: 'higher' as const, format: 'ratio' as const, subtitle: 'Target ≥ 0.60 (aim 1.00)', tooltip: 'Are you on track for your target retirement income?', pillar: 'grow' },
     { label: 'Investable share of net worth', key: 'invnw', value: kpis?.invnw, target: 0.40, dir: 'higher' as const, format: 'pct' as const, subtitle: 'Target ≥ 40%', tooltip: 'Share of wealth working toward long‑term goals.', pillar: 'grow' },
     { label: 'Retirement contributions', key: 'pension_contrib_pct', value: kpis?.pension_contrib_pct, target: 0.10, dir: 'higher' as const, format: 'pct' as const, subtitle: 'Target ≥ 10%', tooltip: 'Your regular saving toward retirement.', pillar: 'grow' },
   ];

@@ -6,11 +6,16 @@ type MetricKey = 'level'|'sr'|'ef_months'|'dsr_total'|'dti'|'invnw'|'rrr';
 
 const cache = new Map<string, any>();
 
-export function BenchmarksCard({ latest, kpis, className = '' }: { latest: any; kpis: any; className?: string }) {
+export function BenchmarksCard({ latest, kpis, className = '', expanded, onToggle }: { latest: any; kpis: any; className?: string; expanded?: boolean; onToggle?: (next: boolean) => void }) {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [data, setData] = React.useState<{ cohort: any; n: number; metrics: Record<MetricKey, Percentiles>; fallback: boolean } | null>(null);
-  const [showDetails, setShowDetails] = React.useState(false);
+  const [showDetailsLocal, setShowDetailsLocal] = React.useState(false);
+  const showDetails = typeof expanded === 'boolean' ? expanded : showDetailsLocal;
+  const toggle = () => {
+    const next = !showDetails;
+    if (onToggle) onToggle(next); else setShowDetailsLocal(next);
+  };
 
   const cohortParams = React.useMemo(() => {
     const slots = latest?.inputs?.slots || {};
@@ -94,11 +99,11 @@ export function BenchmarksCard({ latest, kpis, className = '' }: { latest: any; 
 
   function fmtMetricLabel(k: MetricKey): string {
     return k === 'sr' ? 'Savings rate' :
-           k === 'ef_months' ? 'Emergency buffer (months)' :
+           k === 'ef_months' ? 'Emergency Buffer' :
            k === 'dsr_total' ? 'Debt payments (of income)' :
            k === 'dti' ? 'Total debt vs income' :
            k === 'invnw' ? 'Investable share of net worth' :
-           k === 'rrr' ? 'Retirement readiness' : 'Level';
+           k === 'rrr' ? 'Retirement on Track' : 'Level';
   }
 
   function fmtValue(k: MetricKey, v: number | null | undefined): string {
@@ -155,7 +160,7 @@ export function BenchmarksCard({ latest, kpis, className = '' }: { latest: any; 
         className="absolute top-2 right-2 h-6 w-6 rounded-full border border-border bg-card text-muted flex items-center justify-center hover:opacity-90"
         aria-label={showDetails ? 'Hide details' : 'Show details'}
         title={showDetails ? 'Hide details' : 'Show details'}
-        onClick={() => setShowDetails(v => !v)}
+        onClick={toggle}
       >
         <span className="text-xs">{showDetails ? '−' : '+'}</span>
       </button>
