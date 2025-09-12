@@ -19,6 +19,10 @@ export default {
         card: "var(--card)",
         muted: "var(--muted)",
         border: "var(--border)",
+        // Landing page color tokens
+        bg: '#0B0B0F',
+        fg: '#F5F7FB',
+        dim: 'rgba(245,247,251,0.6)',
       },
       borderRadius: {
         sm: "var(--radius-sm)",

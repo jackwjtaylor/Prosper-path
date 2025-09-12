@@ -141,3 +141,41 @@ The application will be accessible at `http://localhost:3000`.
 
 ## Output Guardrails
 Assistant messages are checked for safety and compliance before they are shown in the UI.  The guardrail call now lives directly inside `src/app/App.tsx`: when a `response.text.delta` stream starts we mark the message as **IN_PROGRESS**, and once the server emits `guardrail_tripped` or `response.done` we mark the message as **FAIL** or **PASS** respectively.  If you want to change how moderation is triggered or displayed, search for `guardrail_tripped` inside `App.tsx` and tweak the logic there.
+
+## Waitlist Landing Page (Marketing‑only mode)
+
+- Page: `/waitlist` with a built‑in email form.
+- API: `POST /api/waitlist` upserts into `waitlist_signups`.
+
+Supabase table (run in SQL editor):
+
+```sql
+create table if not exists public.waitlist_signups (
+  id uuid primary key default gen_random_uuid(),
+  email text not null,
+  name text,
+  source text,
+  user_agent text,
+  utm_source text,
+  utm_medium text,
+  utm_campaign text,
+  created_at timestamptz not null default now(),
+  constraint waitlist_email_unique unique (email)
+);
+
+alter table public.waitlist_signups enable row level security;
+-- No public insert policy required if the API uses the service role key (recommended).
+```
+
+Environment (Vercel → Settings → Environment Variables):
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (server only; never expose client‑side)
+- `NEXT_PUBLIC_MARKETING_ONLY=1` (redirect all routes to `/waitlist`)
+
+Production behavior with `NEXT_PUBLIC_MARKETING_ONLY=1`:
+- Root `/` redirects to `/waitlist`.
+- Middleware restricts all pages to the landing page (static assets and `/api/waitlist` allowed).
+
+Local test:
+- `NEXT_PUBLIC_MARKETING_ONLY=1 npm run dev` → visit `/` and `/waitlist`.
