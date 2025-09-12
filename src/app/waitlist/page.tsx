@@ -27,10 +27,11 @@ function Footer() {
 export default function Page() {
   return (
     <main className="relative h-[100svh] w-screen overflow-hidden bg-bg text-fg">
-      {/* Logo top-right */}
-      <header className="absolute top-6 right-6 z-20">
-        <Link href="/waitlist" className="inline-flex items-center gap-2">
+      {/* Logo top-left */}
+      <header className="absolute top-6 left-6 z-20">
+        <Link href="/waitlist" className="inline-flex items-center gap-3">
           <img src="/openai-logomark.svg" alt="Prosper logo" className="h-8 w-8 md:h-10 md:w-10 opacity-95" />
+          <span className="text-fg/90 text-sm md:text-base font-semibold tracking-tight">prosperpath.io</span>
           <span className="sr-only">Prosper</span>
         </Link>
       </header>
@@ -60,8 +61,8 @@ export default function Page() {
               Prosper Path
             </h1>
             <p className="text-dim text-lg md:text-xl max-w-[720px]">
-              <strong className="text-fg">The money mentor you never had. Get a tailored, step-by-step plan to grow your wealth.</strong><br />
-              
+              <strong className="text-fg">The money mentor you never had. </strong><br />
+              Get a tailored, step-by-step plan to grow your wealth.
             </p>
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full justify-center">
               {/* Inline email capture */}
