@@ -60,8 +60,8 @@ export default function Page() {
               Prosper Path
             </h1>
             <p className="text-dim text-lg md:text-xl max-w-[720px]">
-              <strong className="text-fg">The money mentor you never had.</strong><br />
-              Get a clear, actionable plan to grow your wealth, just by having a simple conversation
+              <strong className="text-fg">The money mentor you never had. Get a tailored, step-by-step plan to grow your wealth.</strong><br />
+              
             </p>
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full justify-center">
               {/* Inline email capture */}
