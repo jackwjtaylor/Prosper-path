@@ -4,7 +4,7 @@ export default function ContactPage() {
       <h1 className="text-3xl font-semibold mb-4">Contact Us</h1>
       <p className="text-sm mb-3">
         Have questions or need support? Reach out to us at
-        <a href="mailto:support@prosper.com" className="underline"> support@prosper.com</a>.
+        <a href="mailto:jack@prosperpath.io" className="underline"> jack@prosperpath.io</a>.
       </p>
       <p className="text-sm">We look forward to hearing from you.</p>
     </main>
