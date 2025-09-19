@@ -53,12 +53,12 @@ export default function WaitlistForm({ buttonLabel = "Join Waitlist", placeholde
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder={placeholder}
-          className="flex-1 rounded-md border border-gray-300 bg-white/90 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 rounded-md border border-gray-300 bg-[#EFEEEB]/90 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
           type="submit"
           disabled={status === "loading"}
-          className="inline-flex items-center justify-center whitespace-nowrap rounded-full border border-dim bg-white px-6 py-3 text-sm font-medium text-bg hover:opacity-90 disabled:opacity-60"
+          className="inline-flex items-center justify-center whitespace-nowrap rounded-full border border-dim bg-[#EFEEEB] px-6 py-3 text-sm font-medium text-[#083630] hover:opacity-90 disabled:opacity-60"
         >
           {status === "loading" ? "Submitting…" : buttonLabel}
         </button>
@@ -69,7 +69,7 @@ export default function WaitlistForm({ buttonLabel = "Join Waitlist", placeholde
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Optional: your name"
-          className="w-full rounded-md border border-gray-200 bg-white/90 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-md border border-gray-200 bg-[#EFEEEB]/90 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       )}
       {error && <p className="text-sm text-red-600">{error}</p>}

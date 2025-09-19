@@ -12,7 +12,7 @@ export const metadata = {
 function Footer() {
   return (
     <footer className="absolute bottom-6 inset-x-0 z-20">
-      <div className="mx-auto max-w-[1040px] px-6 flex items-center justify-between text-xs text-dim">
+      <div className="mx-auto max-w-[1040px] px-6 flex items-center justify-between text-sm text-dim">
         <div className="flex items-center gap-4">
           <Link href="/privacy" className="hover:text-fg">Privacy</Link>
           <Link href="/terms" className="hover:text-fg">Terms</Link>
@@ -40,43 +40,34 @@ export default function Page() {
       </div>
 
       {/* Overlay for readability */}
-      <div className="absolute inset-0 bg-black/50 z-10" />
+      <div className="absolute inset-0 bg-black/40 z-10" />
 
       {/* Optional soft glow */}
       <div
         className="pointer-events-none absolute inset-0 opacity-60 z-10"
         style={{
           background:
-            'radial-gradient(1200px 600px at 50% 40%, rgba(255,255,255,0.06), transparent 60%)',
+            'radial-gradient(1200px 600px at 50% 40%, rgba(255,255,255,0.08), transparent 60%)',
         }}
       />
 
       {/* Nav hidden */}
 
-      <section className="relative h-full flex items-center z-20">
-        <div className="mx-auto max-w-[1040px] px-6 w-full">
-          <div className="flex flex-col items-center text-center gap-8">
-            <div className="w-full flex justify-center">
-              <img
-                src="/prosper_wordmark.svg"
-                alt="Prosper wordmark"
-                className="max-h-[18vw] md:max-h-[8rem] w-auto"
-              />
-            </div>
-            <p className="text-dim text-lg md:text-xl max-w-[720px]">
-              <strong className="text-fg">The money mentor you never had. </strong><br />
-              Get a tailored, step-by-step plan to grow your wealth.
+      <section className="relative z-20 flex h-full items-center justify-center">
+        <div className="w-full max-w-[1120px] px-6">
+          <div className="flex flex-col items-center text-center gap-6 md:gap-8">
+            <h1 className="text-4xl font-semibold tracking-tight md:text-6xl md:leading-tight">
+              Your personal money coach.
+            </h1>
+            <p className="text-dim text-lg md:text-xl md:text-balance max-w-[680px]">
+              Get a clear plan to grow your wealth, just by having a simple conversation.
             </p>
-            <div className="flex flex-col sm:flex-row items-center gap-3 w-full justify-center">
-              {/* Inline email capture */}
-              {/* Uses light input styling for contrast over video overlay */}
-              {/* No name collected per request */}
-              {/* The form is responsive: stacks on small, inline on larger screens */}
-              {/* Button label tuned to "Join Waitlist" */}
-              {/* Placeholder tuned to match dark UI */}
-              {/* Success + error messages appear under the form */}
+            <div className="flex w-full max-w-[520px] flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
               <WaitlistForm includeName={false} buttonLabel="Join Waitlist" placeholder="Enter your email" />
             </div>
+            <p className="text-xs text-dim md:text-sm">
+              Reserve your spot and be first to unlock the Prosper coaching experience.
+            </p>
           </div>
         </div>
       </section>
