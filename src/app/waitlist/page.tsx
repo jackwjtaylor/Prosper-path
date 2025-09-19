@@ -18,7 +18,12 @@ function Footer() {
           <Link href="/terms" className="hover:text-fg">Terms</Link>
           <Link href="/contact" className="hover:text-fg">Contact</Link>
         </div>
-        <a href="https://x.com/" className="hover:text-fg">X</a>
+        <div className="flex items-center gap-3">
+          <a href="https://x.com/" className="hover:text-fg">X</a>
+          <a href="https://instagram.com/" className="hover:text-fg" aria-label="Instagram">
+            <span className="inline-flex h-4 w-4 items-center justify-center rounded-sm border border-current text-xs">IG</span>
+          </a>
+        </div>
       </div>
     </footer>
   )
@@ -66,7 +71,7 @@ export default function Page() {
               <WaitlistForm includeName={false} buttonLabel="Join Waitlist" placeholder="Enter your email" />
             </div>
             <p className="text-xs text-dim md:text-sm">
-              Reserve your spot and be first to unlock the Prosper coaching experience.
+              Reserve your spot and be first to unlock the Prosper experience.
             </p>
           </div>
         </div>
