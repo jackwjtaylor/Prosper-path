@@ -4,6 +4,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Prosper AI",
   description: "your personal wealth coach.",
+  icons: {
+    icon: "/favicon.png",
+  },
 };
 
 export default function RootLayout({

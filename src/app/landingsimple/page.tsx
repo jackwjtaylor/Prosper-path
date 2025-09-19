@@ -2,7 +2,7 @@ import Link from 'next/link'
 import BackgroundVideo from "@/app/components/BackgroundVideo";
 
 export const metadata = {
-  title: 'Prosper - Start Your Money Coach',
+  title: 'Prosperpath.io',
   description: 'A streamlined view of Prosper for quick evaluation.',
 };
 
