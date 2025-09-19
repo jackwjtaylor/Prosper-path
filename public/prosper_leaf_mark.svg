@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Prosper leaf mark">
+  <title>Prosper Leaf Mark</title>
+  <defs>
+    <!-- Use currentColor so you can style it via CSS (e.g., color: #0f5132) -->
+    <style>
+      :root { --stroke: 28; }
+      .mark { fill: none; stroke: #ffffff; stroke-width: var(--stroke); stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+  <!-- Outer circle -->
+  <circle class="mark" cx="256" cy="256" r="200"/>
+  <!-- Stem -->
+  <path class="mark" d="M256 352V244"/>
+  <!-- Left leaf -->
+  <path class="mark" d="M256 260
+                        C 220 220, 168 216, 136 244
+                        C 186 244, 218 262, 238 288"/>
+  <!-- Right leaf -->
+  <path class="mark" d="M256 260
+                        C 292 220, 344 216, 376 244
+                        C 326 244, 294 262, 274 288"/>
+</svg>

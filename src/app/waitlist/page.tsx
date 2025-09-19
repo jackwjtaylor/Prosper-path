@@ -3,7 +3,7 @@ import WaitlistForm from "@/app/components/WaitlistForm";
 import BackgroundVideo from "@/app/components/BackgroundVideo";
 
 export const metadata = {
-  title: 'Prosper — Your Voice-First Money Coach',
+  title: 'Prosper - Your Personal Money Coach',
   description: 'One-screen clarity. Real coaching. Better money habits.',
 };
 
@@ -30,8 +30,7 @@ export default function Page() {
       {/* Logo top-left */}
       <header className="absolute top-6 left-6 z-20">
         <Link href="/waitlist" className="inline-flex items-center gap-3">
-          <img src="/openai-logomark.svg" alt="Prosper logo" className="h-8 w-8 md:h-10 md:w-10 opacity-95" />
-          <span className="text-fg/90 text-sm md:text-base font-semibold tracking-tight">prosperpath.io</span>
+          <img src="/prosper_wordmark.svg" alt="Prosper wordmark" className="h-10 md:h-12 w-auto opacity-95" />
           <span className="sr-only">Prosper</span>
         </Link>
       </header>
@@ -57,9 +56,13 @@ export default function Page() {
       <section className="relative h-full flex items-center z-20">
         <div className="mx-auto max-w-[1040px] px-6 w-full">
           <div className="flex flex-col items-center text-center gap-8">
-            <h1 className="text-[12vw] leading-none md:text-[9rem] font-extrabold tracking-tight">
-              Prosper Path
-            </h1>
+            <div className="w-full flex justify-center">
+              <img
+                src="/prosper_wordmark.svg"
+                alt="Prosper wordmark"
+                className="max-h-[18vw] md:max-h-[8rem] w-auto"
+              />
+            </div>
             <p className="text-dim text-lg md:text-xl max-w-[720px]">
               <strong className="text-fg">The money mentor you never had. </strong><br />
               Get a tailored, step-by-step plan to grow your wealth.

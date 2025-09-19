@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 200" role="img" aria-label="Prosper wordmark">
+  <title>Prosper Wordmark</title>
+  <style>
+    text {
+      font-family: 'Playfair Display', serif;
+      font-weight: 700;
+      font-size: 120px;
+      letter-spacing: -4px;
+      fill: #ffffff;
+    }
+  </style>
+  <text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle">Prosper</text>
+</svg>
