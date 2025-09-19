@@ -6,8 +6,12 @@ import App from "./App";
 
 export default function Page() {
   const marketingOnly = String(process.env.NEXT_PUBLIC_MARKETING_ONLY || "").toLowerCase();
+  const landingVariant = String(process.env.NEXT_PUBLIC_LANDING_VARIANT || "").toLowerCase();
   if (marketingOnly === "1" || marketingOnly === "true" || marketingOnly === "yes") {
     redirect("/waitlist");
+  }
+  if (landingVariant === "landingsimple") {
+    redirect("/landingsimple");
   }
   return (
     <Suspense fallback={<div>Loading...</div>}>
