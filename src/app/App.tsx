@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
 import Image from "next/image";
@@ -11,6 +11,7 @@ import LeftPaneControls from "./components/LeftPaneControls";
 import ChatPanel from "./components/ChatPanel";
 import VoiceDock from "./components/VoiceDock";
 import ThemeToggle from "./components/ThemeToggle";
+import VoiceOnboardingOverlay, { VoiceOnboardingPhase } from "./components/VoiceOnboardingOverlay";
 
 import { SessionStatus } from "@/app/types";
 import type { RealtimeAgent } from "@openai/agents/realtime";
@@ -53,6 +54,7 @@ function App() {
   const selectedVoice = useAppStore(s => s.voice);
   const isMicMuted = useAppStore(s => s.isMicMuted);
   const setIsMicMuted = useAppStore(s => s.setIsMicMuted);
+  const setIsTranscriptVisible = useAppStore(s => s.setIsTranscriptVisible);
 
   const [selectedAgentConfigSet, setSelectedAgentConfigSet] = useState<RealtimeAgent[] | null>(null);
 
@@ -64,7 +66,34 @@ function App() {
   const [isUserDataOpen, setIsUserDataOpen] = useState<boolean>(false);
   const [missingRequiredCount, setMissingRequiredCount] = useState<number>(0);
   const [householdInfo, setHouseholdInfo] = useState<{ email?: string; full_name?: string } | null>(null);
+  const voiceOnboardingFlag = (process.env.NEXT_PUBLIC_VOICE_ONBOARDING || "").toLowerCase();
+  const isVoiceOnboardingEnabled = voiceOnboardingFlag === "1" || voiceOnboardingFlag === "true" || voiceOnboardingFlag === "yes";
+  const isLandingSimpleSource = (searchParams.get("source") || "").toLowerCase() === "landing-simple";
+  const shouldShowVoiceIntroInitially = isVoiceOnboardingEnabled && isLandingSimpleSource;
+  const [showVoiceIntro, setShowVoiceIntro] = useState<boolean>(shouldShowVoiceIntroInitially);
+  const [voiceIntroPhase, setVoiceIntroPhase] = useState<VoiceOnboardingPhase>("idle");
+  const [voiceIntroError, setVoiceIntroError] = useState<string | null>(null);
+  const voiceIntroTriggeredRef = useRef(false);
+  const voiceIntroGreetingSentRef = useRef(false);
+  const voiceIntroEngagedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [voiceIntroCanDismiss, setVoiceIntroCanDismiss] = useState(false);
   useEffect(() => { ensureHouseholdId().then(setHouseholdId); }, []);
+  useEffect(() => {
+    if (!isVoiceOnboardingEnabled) return;
+    if (!isLandingSimpleSource) return;
+    if (voiceIntroTriggeredRef.current) return;
+    voiceIntroTriggeredRef.current = true;
+    voiceIntroGreetingSentRef.current = false;
+    setVoiceIntroPhase("idle");
+    setShowVoiceIntro(true);
+    setVoiceIntroCanDismiss(false);
+  }, [isVoiceOnboardingEnabled, isLandingSimpleSource]);
+
+  useEffect(() => {
+    if (showVoiceIntro) {
+      setIsTranscriptVisible(true);
+    }
+  }, [showVoiceIntro, setIsTranscriptVisible]);
   // Track auth status and auto-link household when signed in
   useEffect(() => {
     const supa = getSupabaseClient();
@@ -161,14 +190,14 @@ function App() {
 
   const { startRecording, stopRecording } = useAudioDownload();
 
-  const sendClientEvent = (eventObj: any, eventNameSuffix = "") => {
+  const sendClientEvent = useCallback((eventObj: any, eventNameSuffix = "") => {
     try {
       sendEvent(eventObj);
       logClientEvent(eventObj, eventNameSuffix);
     } catch (err) {
       console.error('Failed to send via SDK', err);
     }
-  };
+  }, [sendEvent, logClientEvent]);
 
   useHandleSessionHistory();
 
@@ -302,6 +331,90 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    if (!showVoiceIntro || !isVoiceOnboardingEnabled) return;
+    let cancelled = false;
+
+    const start = async () => {
+      if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+        setVoiceIntroError("Microphone access is not supported in this browser.");
+        setVoiceIntroPhase("error");
+        return;
+      }
+      try {
+        setVoiceIntroError(null);
+        setVoiceIntroPhase("requesting");
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+        if (cancelled) return;
+        setVoiceIntroPhase("connecting");
+        setIsAudioPlaybackEnabled(true);
+        setIsMicMuted(false);
+        setVoiceIntroCanDismiss(false);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Microphone permission denied", err);
+        setVoiceIntroError("Microphone permission is required to talk with Prosper.");
+        setVoiceIntroPhase("error");
+      }
+    };
+
+    start();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showVoiceIntro, isVoiceOnboardingEnabled, setIsAudioPlaybackEnabled, setIsMicMuted]);
+
+  useEffect(() => {
+    if (!showVoiceIntro || voiceIntroPhase === "error" || !isVoiceOnboardingEnabled) return;
+
+    if (sessionStatus === "CONNECTING") {
+      setVoiceIntroPhase((prev) => (prev === "requesting" ? "requesting" : "connecting"));
+    }
+
+    if (sessionStatus === "CONNECTED") {
+      setVoiceIntroPhase((prev) => {
+        if (prev === "connecting" || prev === "requesting" || prev === "idle") {
+          return "listening";
+        }
+        return prev;
+      });
+      if (!voiceIntroGreetingSentRef.current) {
+        voiceIntroGreetingSentRef.current = true;
+        try {
+          sendClientEvent(
+            {
+              type: 'response.create',
+              instructions:
+                "You are Prosper, a warm and trustworthy money coach. Greet the user in a friendly tone, introduce yourself, confirm you can hear them clearly, and ask for their first name before moving into guidance.",
+            },
+            'voice_onboarding_intro',
+          );
+        } catch (err) {
+          console.error('Failed to send onboarding greeting', err);
+        }
+        if (voiceIntroEngagedTimeoutRef.current) {
+          clearTimeout(voiceIntroEngagedTimeoutRef.current);
+        }
+        voiceIntroEngagedTimeoutRef.current = setTimeout(() => {
+          setVoiceIntroPhase("engaged");
+          setVoiceIntroCanDismiss(true);
+          voiceIntroEngagedTimeoutRef.current = null;
+        }, 400);
+      }
+    }
+  }, [showVoiceIntro, voiceIntroPhase, sessionStatus, isVoiceOnboardingEnabled, sendClientEvent]);
+
+  useEffect(() => {
+    return () => {
+      if (voiceIntroEngagedTimeoutRef.current) {
+        clearTimeout(voiceIntroEngagedTimeoutRef.current);
+        voiceIntroEngagedTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   const disconnectFromRealtime = () => {
     disconnect();
     setSessionStatus("DISCONNECTED");
@@ -316,6 +429,22 @@ function App() {
       item: { id, type: 'message', role: 'user', content: [{ type: 'input_text', text }] },
     });
     sendClientEvent({ type: 'response.create' }, '(simulated user text message)');
+  };
+
+  const handleSkipVoiceIntro = () => {
+    setShowVoiceIntro(false);
+    setVoiceIntroPhase('idle');
+    setVoiceIntroError(null);
+    voiceIntroGreetingSentRef.current = true;
+    if (voiceIntroEngagedTimeoutRef.current) {
+      clearTimeout(voiceIntroEngagedTimeoutRef.current);
+      voiceIntroEngagedTimeoutRef.current = null;
+    }
+    setVoiceIntroCanDismiss(false);
+  };
+
+  const handleContinueVoiceIntro = () => {
+    handleSkipVoiceIntro();
   };
 
   const updateSession = () => {
@@ -654,6 +783,16 @@ function App() {
           </div>
         </div>
       </div>
+      <VoiceOnboardingOverlay
+        visible={showVoiceIntro}
+        phase={voiceIntroPhase}
+        status={sessionStatus}
+        error={voiceIntroError}
+        onSkip={handleSkipVoiceIntro}
+        onContinue={handleContinueVoiceIntro}
+        canContinue={voiceIntroCanDismiss}
+      />
+
       {/* Desktop Voice Dock */}
       <VoiceDock onToggleConnection={onToggleConnection} />
       {/* Consent modal removed; greet-and-consent handled by agent */}

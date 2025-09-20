@@ -61,7 +61,7 @@ export default function Page() {
             </p>
             <div className="flex w-full max-w-[360px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
               <Link
-                href="/app"
+                href="/app?source=landing-simple"
                 className="inline-flex items-center justify-center whitespace-nowrap rounded-full border border-dim bg-[#EFEEEB] px-7 py-3 text-sm font-medium text-[#083630] hover:opacity-90"
               >
                 Start
