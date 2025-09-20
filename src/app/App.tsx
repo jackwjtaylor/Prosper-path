@@ -458,8 +458,15 @@ function App() {
       <div className="px-2 py-3 max-w-7xl mx-auto w-full">
         <div className="nav-shell text-lg font-semibold flex justify-between items-center">
           <Link href="/home" className="flex items-center">
-            <Image src="2D76K394.eps.svg" alt="Prosper Logo" width={20} height={20} className="mr-2" />
-            <span>Prosper AI <span className="text-gray-500">your personal wealth coach</span></span>
+            <Image
+              src="/prosper_wordmark.svg"
+              alt="Prosper wordmark"
+              width={192}
+              height={40}
+              className="h-8 w-auto md:h-10"
+              priority
+            />
+            <span className="sr-only">Prosper</span>
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm">
             <Link
