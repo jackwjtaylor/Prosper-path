@@ -65,13 +65,13 @@ export default function Page() {
               Your personal money coach.
             </h1>
             <p className="text-dim text-lg md:text-xl md:text-balance max-w-[680px]">
-              Get a clear plan to grow your wealth, just by having a simple conversation.
+              A step-by-step plan to grow your wealth
             </p>
             <div className="flex w-full max-w-[520px] flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
               <WaitlistForm includeName={false} buttonLabel="Join Waitlist" placeholder="Enter your email" />
             </div>
             <p className="text-xs text-dim md:text-sm">
-              Reserve your spot and be first to unlock the Prosper experience.
+              Join the waitlist for early access
             </p>
           </div>
         </div>
