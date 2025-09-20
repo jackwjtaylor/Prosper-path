@@ -62,7 +62,7 @@ export default function Page() {
         <div className="w-full max-w-[1120px] px-6">
           <div className="flex flex-col items-center text-center gap-6 md:gap-8">
             <h1 className="text-4xl font-semibold tracking-tight md:text-6xl md:leading-tight">
-              Your personal money coach.
+              Your personal money coach
             </h1>
             <p className="text-dim text-lg md:text-xl md:text-balance max-w-[680px]">
               A step-by-step plan to grow your wealth
