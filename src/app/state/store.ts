@@ -53,7 +53,7 @@ let state: AppStore = {
   isPTTActive: typeof window !== 'undefined' ? readPersistedBoolean('pushToTalkUI', false) : false,
   isPTTUserSpeaking: false,
   isAudioPlaybackEnabled: typeof window !== 'undefined' ? readPersistedBoolean('audioPlaybackEnabled', true) : true,
-  voice: typeof window !== 'undefined' ? readPersistedString('voice', 'sage') : 'sage',
+  voice: typeof window !== 'undefined' ? readPersistedString('voice', 'cedar') : 'cedar',
   isMicMuted: typeof window !== 'undefined' ? readPersistedBoolean('micMuted', false) : false,
   isTranscriptVisible: typeof window !== 'undefined' ? readPersistedBoolean('transcriptVisible', false) : false,
 

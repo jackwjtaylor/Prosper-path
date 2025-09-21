@@ -27,6 +27,12 @@ function Footer() {
 }
 
 export default function Page() {
+  const useOnboardingV2 = String(process.env.NEXT_PUBLIC_VOICE_ONBOARDING_V2 || '').toLowerCase() === 'true'
+    || String(process.env.NEXT_PUBLIC_VOICE_ONBOARDING_V2 || '').toLowerCase() === '1'
+    || String(process.env.NEXT_PUBLIC_VOICE_ONBOARDING_V2 || '').toLowerCase() === 'yes';
+  const startHref = useOnboardingV2
+    ? '/app?source=landing-simple&agentConfig=onboardingV2'
+    : '/app?source=landing-simple';
   return (
     <main className="relative h-[100svh] w-screen overflow-hidden bg-bg text-fg">
       <header className="absolute top-6 left-6 z-20">
@@ -61,7 +67,7 @@ export default function Page() {
             </p>
             <div className="flex w-full max-w-[360px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
               <Link
-                href="/app?source=landing-simple"
+                href={startHref}
                 className="inline-flex items-center justify-center whitespace-nowrap rounded-full border border-dim bg-[#EFEEEB] px-7 py-3 text-sm font-medium text-[#083630] hover:opacity-90"
               >
                 Start

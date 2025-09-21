@@ -1,6 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
 import Image from "next/image";
 import Link from "next/link";
@@ -23,17 +23,20 @@ import { createModerationGuardrail } from "@/app/agentConfigs/guardrails";
 
 import { allAgentSets, defaultAgentSetKey } from "@/app/agentConfigs";
 import { realtimeOnlyCompanyName, makeRealtimeAgent } from "@/app/agentConfigs/realtimeOnly";
+import { makeOnboardingAgent } from "@/app/agentConfigs/onboardingV2";
 
 import useAudioDownload from "./hooks/useAudioDownload";
 import { useHandleSessionHistory } from "./hooks/useHandleSessionHistory";
 import { ensureHouseholdId } from "@/app/lib/householdLocal";
 import { getSupabaseClient } from "@/app/lib/supabaseClient";
 import { useAppStore } from "@/app/state/store";
+import { useOnboardingStore } from "@/app/state/onboarding";
 import { hapticToggle } from "@/app/lib/haptics";
 
 const sdkScenarioMap: Record<string, RealtimeAgent[]> = allAgentSets;
 
 function App() {
+  const router = useRouter();
   const searchParams = useSearchParams()!;
   // codec selection UI removed; keep default codec via SDK
 
@@ -67,7 +70,10 @@ function App() {
   const [missingRequiredCount, setMissingRequiredCount] = useState<number>(0);
   const [householdInfo, setHouseholdInfo] = useState<{ email?: string; full_name?: string } | null>(null);
   const voiceOnboardingFlag = (process.env.NEXT_PUBLIC_VOICE_ONBOARDING || "").toLowerCase();
-  const isVoiceOnboardingEnabled = voiceOnboardingFlag === "1" || voiceOnboardingFlag === "true" || voiceOnboardingFlag === "yes";
+  const voiceOnboardingV2Flag = (process.env.NEXT_PUBLIC_VOICE_ONBOARDING_V2 || "").toLowerCase();
+  const isVoiceOnboardingEnabled =
+    voiceOnboardingFlag === "1" || voiceOnboardingFlag === "true" || voiceOnboardingFlag === "yes" ||
+    voiceOnboardingV2Flag === "1" || voiceOnboardingV2Flag === "true" || voiceOnboardingV2Flag === "yes";
   const isLandingSimpleSource = (searchParams.get("source") || "").toLowerCase() === "landing-simple";
   const shouldShowVoiceIntroInitially = isVoiceOnboardingEnabled && isLandingSimpleSource;
   const [showVoiceIntro, setShowVoiceIntro] = useState<boolean>(shouldShowVoiceIntroInitially);
@@ -78,6 +84,7 @@ function App() {
   const voiceIntroEngagedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [voiceIntroSegments, setVoiceIntroSegments] = useState<Array<{ speaker: 'assistant' | 'user'; text: string }>>([]);
   const [voiceIntroName, setVoiceIntroName] = useState<string>("");
+  const updatePersona = useOnboardingStore(s => s.updatePersona);
   useEffect(() => { ensureHouseholdId().then(setHouseholdId); }, []);
   useEffect(() => {
     if (!isVoiceOnboardingEnabled) return;
@@ -97,6 +104,63 @@ function App() {
       setIsTranscriptVisible(true);
     }
   }, [showVoiceIntro, setIsTranscriptVisible]);
+
+  // Listen for onboarding v2 tool events to update persona and finish onboarding
+  useEffect(() => {
+    const onProfile = (e: any) => {
+      try {
+        const inputs = (e?.detail?.inputs || {}) as Record<string, any>;
+        const slots = (e?.detail?.slots || {}) as Record<string, any>;
+        const persona: any = {};
+        // Name
+        const fullName = inputs.full_name || slots.full_name?.value || inputs.name;
+        if (typeof fullName === 'string' && fullName.trim()) persona.name = fullName.trim().split(' ')[0];
+        // City/Country
+        if (typeof inputs.city === 'string') persona.city = inputs.city;
+        if (typeof inputs.country === 'string') persona.country = inputs.country;
+        if (typeof slots.country?.value === 'string') persona.country = slots.country.value;
+        // Partner
+        const partnerVal = (typeof inputs.partner === 'boolean') ? inputs.partner : slots.partner?.value;
+        if (typeof partnerVal === 'boolean') persona.partner = partnerVal;
+        // Children
+        const kids = inputs.childrenCount ?? inputs.children ?? slots.dependants_count?.value;
+        if (kids != null && Number.isFinite(Number(kids))) persona.childrenCount = Number(kids);
+        // Tone
+        const tone = (inputs.tone || inputs.tone_preference || '').toString().toLowerCase();
+        if (tone.includes('straight')) persona.tone = 'straight';
+        else if (tone.includes('relax') || tone.includes('laid')) persona.tone = 'relaxed';
+        // Goals
+        if (typeof inputs.primaryGoal === 'string' && inputs.primaryGoal.trim()) persona.primaryGoal = inputs.primaryGoal.trim();
+        else if (typeof inputs.goal === 'string' && inputs.goal.trim()) persona.primaryGoal = inputs.goal.trim();
+        if (typeof inputs.triedBefore === 'string' && inputs.triedBefore.trim()) persona.triedBefore = inputs.triedBefore.trim();
+        // Age decade from birth_year if present
+        const by = slots.birth_year?.value || inputs.birth_year;
+        if (by && Number.isFinite(Number(by))) {
+          const yr = Number(by);
+          const now = new Date().getUTCFullYear();
+          const age = Math.max(0, now - yr);
+          const decade = Math.floor(age / 10) * 10;
+          if (decade >= 10) persona.ageDecade = (decade.toString() + 's') as any;
+        }
+        updatePersona(persona);
+      } catch {}
+    };
+    const onFinish = () => {
+      try {
+        const url = new URL(window.location.href);
+        const agentConfig = (url.searchParams.get('agentConfig') || '').toLowerCase();
+        const source = (url.searchParams.get('source') || '').toLowerCase();
+        const v2 = agentConfig === 'onboardingv2' && source === 'landing-simple';
+        if (v2) router.push('/simple');
+      } catch {}
+    };
+    window.addEventListener('pp:onboarding_profile', onProfile as any);
+    window.addEventListener('pp:onboarding_finish', onFinish as any);
+    return () => {
+      window.removeEventListener('pp:onboarding_profile', onProfile as any);
+      window.removeEventListener('pp:onboarding_finish', onFinish as any);
+    };
+  }, [router, updatePersona]);
   // Track auth status and auto-link household when signed in
   useEffect(() => {
     const supa = getSupabaseClient();
@@ -348,7 +412,15 @@ function App() {
         }
         // Apply selected voice to the root agent by constructing a fresh instance
         const agentsToUse: RealtimeAgent[] = reorderedAgents.map((a, i) => {
-          if (i === 0) return makeRealtimeAgent(selectedVoice || 'sage');
+          if (i === 0) {
+            const key = agentSetKey;
+            if (key === 'onboardingV2') {
+              // Recreate onboarding agent with selected voice
+              return makeOnboardingAgent(selectedVoice || 'cedar');
+            }
+            // Default realtime coaching agent
+            return makeRealtimeAgent(selectedVoice || 'cedar');
+          }
           return a;
         });
 
@@ -424,14 +496,18 @@ function App() {
       if (!voiceIntroGreetingSentRef.current) {
         voiceIntroGreetingSentRef.current = true;
         try {
-          sendClientEvent(
-            {
-              type: 'response.create',
-              instructions:
-                "You are Prosper, a warm and trustworthy money coach. Greet the user in a friendly tone, confirm you can hear them clearly, ask for their first name, and keep your greeting concise. Include the user's name in future responses once provided.",
-            },
-            'voice_onboarding_intro',
-          );
+          // If onboarding V2 agent is selected, use the richer welcome aligned to the new flow
+          const url = new URL(window.location.href);
+          const agentConfig = url.searchParams.get('agentConfig') || '';
+          const isV2 = agentConfig === 'onboardingV2';
+          const instructions = isV2
+            ? "Hey, I’m Prosper. I get most excited when I can help someone get their money pointed where they want it. Mind if we start with the basics so I know who I’m speaking with? First, can you tell me your first name?"
+            : "You are Prosper, a warm and trustworthy money coach. Greet the user in a friendly tone, confirm you can hear them clearly, ask for their first name, and keep your greeting concise. Include the user's name in future responses once provided.";
+          sendClientEvent({ type: 'response.create', instructions }, 'voice_onboarding_intro');
+          // Analytics: onboarding v2 start
+          if (isV2) {
+            try { fetch('/api/feedback/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: 'analytics', severity: 'low', message: 'onboarding_v2_start' }) }); } catch {}
+          }
         } catch (err) {
           console.error('Failed to send onboarding greeting', err);
         }
@@ -482,11 +558,22 @@ function App() {
     }
     setVoiceIntroSegments([]);
     setVoiceIntroName("");
+    // If onboarding V2 is active, proceed to simplified workspace route
+    try {
+      const agentConfig = (searchParams.get('agentConfig') || '').toLowerCase();
+      const source = (searchParams.get('source') || '').toLowerCase();
+      const v2 = agentConfig === 'onboardingv2' && source === 'landing-simple';
+      if (v2) router.push('/simple');
+    } catch {}
   };
 
   const handleOverlayToggleVoice = () => {
     const next = !isAudioPlaybackEnabled;
     setIsAudioPlaybackEnabled(next);
+    try {
+      const msg = next ? 'voice_unmuted' : 'voice_muted';
+      fetch('/api/feedback/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: 'analytics', severity: 'low', message: msg }) });
+    } catch {}
   };
 
   const updateSession = () => {

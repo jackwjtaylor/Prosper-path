@@ -152,8 +152,17 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
         playsInline
       />
       <div className="absolute inset-0 bg-[#041613]/70" />
-      <div className="relative z-10 flex min-h-full flex-col items-center justify-center gap-8 px-6 text-center text-[#EFEEEB]">
+      <div className="relative z-10 flex min-h-full flex-col items-center justify-center gap-6 md:gap-8 px-6 text-center text-[#EFEEEB]">
         <img src="/prosper_wordmark_offwhite.svg" alt="Prosper" className="h-12 w-auto md:h-14" />
+        {/* Steps indicator (Acts I–IV) */}
+        <div className="flex items-center gap-2 text-[11px] md:text-xs text-[#EFEEEB]/70">
+          {['Warm welcome','Basics','How it works','Ready?'].map((label, i) => (
+            <div key={label} className="inline-flex items-center gap-2">
+              <span className="px-2 py-1 rounded-full border border-[#EFEEEB]/30 bg-[#041613]/30">{label}</span>
+              {i < 3 && <span className="opacity-30">•</span>}
+            </div>
+          ))}
+        </div>
         <div className="flex flex-col items-center gap-4 max-w-xl">
           <h2 className="text-3xl md:text-4xl font-semibold tracking-tight transition-all duration-500">
             {heading}
@@ -165,7 +174,7 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
           )}
         </div>
         <div className="flex flex-col items-center gap-3">
-          <div className="flex items-center gap-3 text-sm md:text-base text-[#EFEEEB]/80">
+          <div className="flex items-center gap-3 text-sm md:text-base text-[#EFEEEB]/80" role="status" aria-live="polite">
             <StatusDot phase={phase} />
             <span>{copy.label}</span>
           </div>
@@ -178,7 +187,13 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
         {segments?.length ? (
           <div className="mt-2 flex w-full max-w-[min(460px,90vw)] flex-col items-center text-left text-[#EFEEEB]/80">
             <div className="relative w-full overflow-hidden rounded-xl bg-[#041613]/40">
-              <div ref={transcriptRef} className="flex max-h-[140px] md:max-h-[180px] flex-col gap-3 overflow-y-auto px-5 py-4">
+              <div
+                ref={transcriptRef}
+                className="flex max-h-[140px] md:max-h-[180px] flex-col gap-3 overflow-y-auto px-5 py-4"
+                role="log"
+                aria-live="polite"
+                aria-atomic="false"
+              >
                 {segments.map((segment, index) => {
                   const isAssistant = segment.speaker === 'assistant';
                   const isAnimated = isAssistant && index === lastAssistantIndex;
@@ -201,6 +216,9 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
             </div>
           </div>
         ) : null}
+
+        {/* Contact capture (save progress) */}
+        <ContactCapture visible={phase === 'engaged' || phase === 'listening'} />
         <button
           type="button"
           onClick={onToggleVoice}
@@ -244,13 +262,88 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
           )}
           {voiceEnabled ? 'Mute' : 'Unmute'}
         </button>
-        <button
-          type="button"
-          onClick={onSkip}
-          className="text-sm md:text-base text-[#EFEEEB]/70 underline-offset-4 hover:underline"
-        >
-          Prefer to type instead?
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={onSkip}
+            className="text-sm md:text-base text-[#EFEEEB]/80 underline-offset-4 hover:underline"
+          >
+            Continue to workspace
+          </button>
+          <span className="text-xs md:text-sm text-[#EFEEEB]/50">or</span>
+          <button
+            type="button"
+            onClick={onSkip}
+            className="text-xs md:text-sm text-[#EFEEEB]/60 underline-offset-4 hover:underline"
+          >
+            Prefer to type instead?
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContactCapture({ visible }: { visible: boolean }) {
+  const [email, setEmail] = React.useState('');
+  const [phone, setPhone] = React.useState('');
+  const [saved, setSaved] = React.useState<null | 'ok' | 'err'>(null);
+  const [saving, setSaving] = React.useState(false);
+  if (!visible) return null;
+
+  const onSave = async () => {
+    setSaving(true);
+    setSaved(null);
+    try {
+      // Best effort: store email to household if provided
+      if (email && /.+@.+\..+/.test(email)) {
+        try { await fetch('/api/household/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) }); } catch {}
+      }
+      // Log a lead payload (email and/or phone)
+      try { await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email || undefined, phone: phone || undefined }) }); } catch {}
+      // Lightweight analytics
+      try { await fetch('/api/feedback/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: 'analytics', severity: 'low', message: 'lead_saved', extra: { email_present: !!email, phone_present: !!phone } }) }); } catch {}
+      setSaved('ok');
+    } catch {
+      setSaved('err');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="w-full max-w-[min(460px,90vw)] text-left">
+      <div className="rounded-xl border border-[#EFEEEB]/20 bg-[#041613]/40 p-4 md:p-5">
+        <div className="text-sm md:text-base text-[#EFEEEB]/80 mb-3">Save your progress — add an email or mobile</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <input
+            type="email"
+            placeholder="Email (best)"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-md border border-[#EFEEEB]/30 bg-transparent px-3 py-2 text-sm placeholder:text-[#EFEEEB]/40 focus:outline-none focus:ring-1 focus:ring-[#EFEEEB]/60"
+          />
+          <input
+            type="tel"
+            placeholder="Mobile (optional)"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full rounded-md border border-[#EFEEEB]/30 bg-transparent px-3 py-2 text-sm placeholder:text-[#EFEEEB]/40 focus:outline-none focus:ring-1 focus:ring-[#EFEEEB]/60"
+          />
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            onClick={onSave}
+            disabled={saving || (!email && !phone)}
+            className="inline-flex items-center gap-2 rounded-full border border-[#EFEEEB]/40 bg-[#EFEEEB]/10 px-4 py-1.5 text-xs md:text-sm font-medium text-[#EFEEEB]/90 hover:bg-[#EFEEEB]/20 disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <span role="status" aria-live="polite">
+            {saved === 'ok' && <span className="text-xs text-emerald-300">Saved. We’ll send a link to continue.</span>}
+            {saved === 'err' && <span className="text-xs text-red-300">Couldn’t save right now.</span>}
+          </span>
+        </div>
       </div>
     </div>
   );

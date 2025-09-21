@@ -57,6 +57,7 @@ export default function FeedbackAdminPage() {
             <option value="idea">Idea</option>
             <option value="ux">UX</option>
             <option value="performance">Performance</option>
+            <option value="analytics">Analytics</option>
             <option value="other">Other</option>
           </select>
           <select value={filter.severity || ''} onChange={(e) => setFilter(s => ({ ...s, severity: e.target.value || undefined }))} className="border rounded px-2 py-1">
