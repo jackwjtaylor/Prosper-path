@@ -76,7 +76,7 @@ function App() {
   const voiceIntroTriggeredRef = useRef(false);
   const voiceIntroGreetingSentRef = useRef(false);
   const voiceIntroEngagedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [voiceIntroTranscript, setVoiceIntroTranscript] = useState<string>("");
+  const [voiceIntroSegments, setVoiceIntroSegments] = useState<Array<{ speaker: 'assistant' | 'user'; text: string }>>([]);
   const [voiceIntroName, setVoiceIntroName] = useState<string>("");
   useEffect(() => { ensureHouseholdId().then(setHouseholdId); }, []);
   useEffect(() => {
@@ -86,6 +86,8 @@ function App() {
     voiceIntroTriggeredRef.current = true;
     voiceIntroGreetingSentRef.current = false;
     setVoiceIntroPhase("idle");
+    setVoiceIntroSegments([]);
+    setVoiceIntroName("");
     setShowVoiceIntro(true);
     // overlay remains until user chooses to switch modes
   }, [isVoiceOnboardingEnabled, isLandingSimpleSource]);
@@ -186,19 +188,39 @@ function App() {
       setHandoffTriggered(true);
       setSelectedAgentName(agentName);
     },
-    onTranscriptDelta: (delta: string) => {
-      setVoiceIntroTranscript(prev => {
-        const next = (prev + delta).trimStart();
+    onTranscriptDelta: (delta: string, speaker) => {
+      if (!delta) return;
+      if (speaker !== 'assistant') return;
+      setVoiceIntroSegments(prev => {
+        const next = [...prev];
+        if (!next.length || next[next.length - 1].speaker !== 'assistant') {
+          next.push({ speaker: 'assistant', text: '' });
+        }
+        const last = next[next.length - 1];
+        next[next.length - 1] = { speaker: 'assistant', text: last.text + delta };
         return next;
       });
     },
-    onTranscriptCompleted: (text: string) => {
-      setVoiceIntroTranscript(text);
-      if (!voiceIntroName && text) {
-        const match = text.match(/\b(?:i'm|i am|my name is)\s+([A-Z][a-zA-Z-']+)/i);
+    onTranscriptCompleted: (text: string, speaker) => {
+      if (!text) return;
+      if (speaker === 'assistant') {
+        setVoiceIntroSegments(prev => {
+          const next = [...prev];
+          if (!next.length || next[next.length - 1].speaker !== 'assistant') {
+            next.push({ speaker: 'assistant', text });
+          } else {
+            next[next.length - 1] = { speaker: 'assistant', text };
+          }
+          return next;
+        });
+      } else {
+        setVoiceIntroSegments(prev => [...prev, { speaker: 'user', text }]);
+      }
+      if (!voiceIntroName) {
+        const match = text.match(/\b(?:i'm|i am|my name is)\s+([A-Z][a-zA-Z-' ]+)/i);
         const candidate = match?.[1];
         if (candidate && candidate.toLowerCase() !== 'prosper') {
-          setVoiceIntroName(candidate);
+          setVoiceIntroName(candidate.trim());
         }
       }
     },
@@ -368,7 +390,7 @@ function App() {
         setVoiceIntroPhase("connecting");
         setIsAudioPlaybackEnabled(true);
         setIsMicMuted(false);
-        setVoiceIntroTranscript("");
+        setVoiceIntroSegments([]);
         setVoiceIntroName("");
       } catch (err) {
         if (cancelled) return;
@@ -458,7 +480,7 @@ function App() {
       clearTimeout(voiceIntroEngagedTimeoutRef.current);
       voiceIntroEngagedTimeoutRef.current = null;
     }
-    setVoiceIntroTranscript("");
+    setVoiceIntroSegments([]);
     setVoiceIntroName("");
   };
 
@@ -809,7 +831,7 @@ function App() {
         status={sessionStatus}
         error={voiceIntroError}
         onSkip={handleSkipVoiceIntro}
-        transcript={voiceIntroTranscript}
+        segments={voiceIntroSegments}
         greetingName={voiceIntroName}
         onToggleVoice={handleOverlayToggleVoice}
         voiceEnabled={isAudioPlaybackEnabled}

@@ -17,7 +17,7 @@ type Props = {
   status: SessionStatus;
   error?: string | null;
   onSkip: () => void;
-  transcript?: string;
+  segments?: Array<{ speaker: 'assistant' | 'user'; text: string }>;
   greetingName?: string;
   onToggleVoice: () => void;
   voiceEnabled: boolean;
@@ -57,36 +57,83 @@ function StatusDot({ phase }: { phase: VoiceOnboardingPhase }) {
   return <span className={`${base} bg-[#EFEEEB]/60`} />;
 }
 
-function TypewriterText({ text }: { text: string }) {
+function TypewriterText({ text, className }: { text: string; className?: string }) {
   const [display, setDisplay] = React.useState<string>("");
+  const displayRef = React.useRef<string>("");
+
+  const setDisplayState = React.useCallback((value: string) => {
+    displayRef.current = value;
+    setDisplay(value);
+  }, []);
+
   React.useEffect(() => {
     if (!text) {
-      setDisplay("");
+      setDisplayState("");
       return;
     }
-    setDisplay("");
+
+    const current = displayRef.current;
+    if (text === current) return;
+
+    if (text.length <= current.length) {
+      setDisplayState(text);
+      return;
+    }
+
+    const isIncremental = text.startsWith(current);
+    const base = isIncremental ? current : "";
+    const remainder = text.slice(base.length);
+
+    if (!remainder) {
+      setDisplayState(text);
+      return;
+    }
+
     let i = 0;
+    setDisplayState(base);
     const interval = window.setInterval(() => {
       i += 1;
-      setDisplay(text.slice(0, i));
-      if (i >= text.length) {
+      setDisplayState(base + remainder.slice(0, i));
+      if (i >= remainder.length) {
         window.clearInterval(interval);
       }
     }, 18);
+
     return () => window.clearInterval(interval);
-  }, [text]);
-  if (!text) return null;
+  }, [text, setDisplayState]);
+
+  if (!text && !display) return null;
   return (
-    <p className="mt-3 max-w-[min(420px,88vw)] text-sm md:text-base leading-relaxed text-[#EFEEEB]/80 font-medium">
+    <p className={className ?? "max-w-[min(420px,88vw)] text-sm md:text-base leading-relaxed text-[#EFEEEB]/80 font-medium"}>
       <span className="whitespace-pre-wrap">{display}</span>
-      <span className="inline-block w-2 animate-pulse">▋</span>
+      {display && <span className="inline-block w-2 animate-pulse">▋</span>}
     </p>
   );
 }
 
-export default function VoiceOnboardingOverlay({ visible, phase, status, error, onSkip, transcript, greetingName, onToggleVoice, voiceEnabled }: Props) {
+export default function VoiceOnboardingOverlay({ visible, phase, status, error, onSkip, segments, greetingName, onToggleVoice, voiceEnabled }: Props) {
   const copy = phaseCopy[phase];
   const heading = greetingName ? `Hey ${greetingName}` : "Hey there...";
+  const lastAssistantIndex = React.useMemo(() => {
+    if (!segments?.length) return -1;
+    for (let i = segments.length - 1; i >= 0; i -= 1) {
+      if (segments[i].speaker === 'assistant') return i;
+    }
+    return -1;
+  }, [segments]);
+  const transcriptRef = React.useRef<HTMLDivElement | null>(null);
+  const serializedSegments = React.useMemo(
+    () => (segments?.map((segment) => `${segment.speaker}:${segment.text}`).join('|') ?? ''),
+    [segments]
+  );
+
+  React.useEffect(() => {
+    const container = transcriptRef.current;
+    if (!container) return;
+    requestAnimationFrame(() => {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    });
+  }, [serializedSegments]);
 
   return (
     <div
@@ -111,9 +158,11 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
           <h2 className="text-3xl md:text-4xl font-semibold tracking-tight transition-all duration-500">
             {heading}
           </h2>
-          <p className="text-base md:text-lg text-[#EFEEEB]/80">
-            If you're able to talk, please allow your mic.
-          </p>
+          {phase === 'requesting' && (
+            <p className="text-base md:text-lg text-[#EFEEEB]/80">
+              If you're able to talk, please allow your mic.
+            </p>
+          )}
         </div>
         <div className="flex flex-col items-center gap-3">
           <div className="flex items-center gap-3 text-sm md:text-base text-[#EFEEEB]/80">
@@ -126,7 +175,32 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
             </p>
           )}
         </div>
-        <TypewriterText text={transcript || ""} />
+        {segments?.length ? (
+          <div className="mt-2 flex w-full max-w-[min(460px,90vw)] flex-col items-center text-left text-[#EFEEEB]/80">
+            <div className="relative w-full overflow-hidden rounded-xl bg-[#041613]/40">
+              <div ref={transcriptRef} className="flex max-h-[140px] md:max-h-[180px] flex-col gap-3 overflow-y-auto px-5 py-4">
+                {segments.map((segment, index) => {
+                  const isAssistant = segment.speaker === 'assistant';
+                  const isAnimated = isAssistant && index === lastAssistantIndex;
+                  return (
+                    <div key={`${segment.speaker}-${index}`} className="w-full">
+                      <span className="block text-[10px] uppercase tracking-[0.3em] text-[#EFEEEB]/50">
+                        {isAssistant ? 'Prosper' : 'You'}
+                      </span>
+                      {isAnimated ? (
+                        <TypewriterText text={segment.text} className="max-w-full text-sm md:text-base leading-relaxed text-[#EFEEEB]/90" />
+                      ) : (
+                        <p className="max-w-full text-sm md:text-base leading-relaxed text-[#EFEEEB]/70 whitespace-pre-wrap">
+                          {segment.text}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
         <button
           type="button"
           onClick={onToggleVoice}

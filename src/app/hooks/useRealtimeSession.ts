@@ -10,11 +10,13 @@ import { useEvent } from '../contexts/EventContext';
 import { useHandleSessionHistory } from './useHandleSessionHistory';
 import { SessionStatus } from '../types';
 
+type TranscriptSpeaker = 'assistant' | 'user';
+
 export interface RealtimeSessionCallbacks {
   onConnectionChange?: (status: SessionStatus) => void;
   onAgentHandoff?: (agentName: string) => void;
-  onTranscriptDelta?: (delta: string) => void;
-  onTranscriptCompleted?: (text: string) => void;
+  onTranscriptDelta?: (delta: string, speaker: TranscriptSpeaker) => void;
+  onTranscriptCompleted?: (text: string, speaker: TranscriptSpeaker) => void;
 }
 
 export interface ConnectOptions {
@@ -50,17 +52,17 @@ export function useRealtimeSession(callbacks: RealtimeSessionCallbacks = {}) {
     switch (event.type) {
       case "conversation.item.input_audio_transcription.completed": {
         historyHandlers.handleTranscriptionCompleted(event);
-        callbacks.onTranscriptCompleted?.(event?.transcript || "");
+        callbacks.onTranscriptCompleted?.(event?.transcript || "", 'user');
         break;
       }
       case "response.audio_transcript.done": {
         historyHandlers.handleTranscriptionCompleted(event);
-        callbacks.onTranscriptCompleted?.(event?.response?.output?.[0]?.content?.[0]?.text || "");
+        callbacks.onTranscriptCompleted?.(event?.response?.output?.[0]?.content?.[0]?.text || "", 'assistant');
         break;
       }
       case "response.audio_transcript.delta": {
         historyHandlers.handleTranscriptionDelta(event);
-        callbacks.onTranscriptDelta?.(event?.delta || "");
+        callbacks.onTranscriptDelta?.(event?.delta || "", 'assistant');
         break;
       }
       default: {
