@@ -76,7 +76,8 @@ function App() {
   const voiceIntroTriggeredRef = useRef(false);
   const voiceIntroGreetingSentRef = useRef(false);
   const voiceIntroEngagedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [voiceIntroCanDismiss, setVoiceIntroCanDismiss] = useState(false);
+  const [voiceIntroTranscript, setVoiceIntroTranscript] = useState<string>("");
+  const [voiceIntroName, setVoiceIntroName] = useState<string>("");
   useEffect(() => { ensureHouseholdId().then(setHouseholdId); }, []);
   useEffect(() => {
     if (!isVoiceOnboardingEnabled) return;
@@ -86,7 +87,7 @@ function App() {
     voiceIntroGreetingSentRef.current = false;
     setVoiceIntroPhase("idle");
     setShowVoiceIntro(true);
-    setVoiceIntroCanDismiss(false);
+    // overlay remains until user chooses to switch modes
   }, [isVoiceOnboardingEnabled, isLandingSimpleSource]);
 
   useEffect(() => {
@@ -184,6 +185,22 @@ function App() {
     onAgentHandoff: (agentName: string) => {
       setHandoffTriggered(true);
       setSelectedAgentName(agentName);
+    },
+    onTranscriptDelta: (delta: string) => {
+      setVoiceIntroTranscript(prev => {
+        const next = (prev + delta).trimStart();
+        return next;
+      });
+    },
+    onTranscriptCompleted: (text: string) => {
+      setVoiceIntroTranscript(text);
+      if (!voiceIntroName && text) {
+        const match = text.match(/\b(?:i'm|i am|my name is)\s+([A-Z][a-zA-Z-']+)/i);
+        const candidate = match?.[1];
+        if (candidate && candidate.toLowerCase() !== 'prosper') {
+          setVoiceIntroName(candidate);
+        }
+      }
     },
   });
   const [userText, setUserText] = useState<string>("");
@@ -347,10 +364,12 @@ function App() {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach((track) => track.stop());
         if (cancelled) return;
+
         setVoiceIntroPhase("connecting");
         setIsAudioPlaybackEnabled(true);
         setIsMicMuted(false);
-        setVoiceIntroCanDismiss(false);
+        setVoiceIntroTranscript("");
+        setVoiceIntroName("");
       } catch (err) {
         if (cancelled) return;
         console.error("Microphone permission denied", err);
@@ -387,7 +406,7 @@ function App() {
             {
               type: 'response.create',
               instructions:
-                "You are Prosper, a warm and trustworthy money coach. Greet the user in a friendly tone, introduce yourself, confirm you can hear them clearly, and ask for their first name before moving into guidance.",
+                "You are Prosper, a warm and trustworthy money coach. Greet the user in a friendly tone, confirm you can hear them clearly, ask for their first name, and keep your greeting concise. Include the user's name in future responses once provided.",
             },
             'voice_onboarding_intro',
           );
@@ -399,7 +418,6 @@ function App() {
         }
         voiceIntroEngagedTimeoutRef.current = setTimeout(() => {
           setVoiceIntroPhase("engaged");
-          setVoiceIntroCanDismiss(true);
           voiceIntroEngagedTimeoutRef.current = null;
         }, 400);
       }
@@ -440,11 +458,13 @@ function App() {
       clearTimeout(voiceIntroEngagedTimeoutRef.current);
       voiceIntroEngagedTimeoutRef.current = null;
     }
-    setVoiceIntroCanDismiss(false);
+    setVoiceIntroTranscript("");
+    setVoiceIntroName("");
   };
 
-  const handleContinueVoiceIntro = () => {
-    handleSkipVoiceIntro();
+  const handleOverlayToggleVoice = () => {
+    const next = !isAudioPlaybackEnabled;
+    setIsAudioPlaybackEnabled(next);
   };
 
   const updateSession = () => {
@@ -789,8 +809,10 @@ function App() {
         status={sessionStatus}
         error={voiceIntroError}
         onSkip={handleSkipVoiceIntro}
-        onContinue={handleContinueVoiceIntro}
-        canContinue={voiceIntroCanDismiss}
+        transcript={voiceIntroTranscript}
+        greetingName={voiceIntroName}
+        onToggleVoice={handleOverlayToggleVoice}
+        voiceEnabled={isAudioPlaybackEnabled}
       />
 
       {/* Desktop Voice Dock */}

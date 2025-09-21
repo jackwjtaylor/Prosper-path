@@ -13,6 +13,8 @@ import { SessionStatus } from '../types';
 export interface RealtimeSessionCallbacks {
   onConnectionChange?: (status: SessionStatus) => void;
   onAgentHandoff?: (agentName: string) => void;
+  onTranscriptDelta?: (delta: string) => void;
+  onTranscriptCompleted?: (text: string) => void;
 }
 
 export interface ConnectOptions {
@@ -48,14 +50,17 @@ export function useRealtimeSession(callbacks: RealtimeSessionCallbacks = {}) {
     switch (event.type) {
       case "conversation.item.input_audio_transcription.completed": {
         historyHandlers.handleTranscriptionCompleted(event);
+        callbacks.onTranscriptCompleted?.(event?.transcript || "");
         break;
       }
       case "response.audio_transcript.done": {
         historyHandlers.handleTranscriptionCompleted(event);
+        callbacks.onTranscriptCompleted?.(event?.response?.output?.[0]?.content?.[0]?.text || "");
         break;
       }
       case "response.audio_transcript.delta": {
         historyHandlers.handleTranscriptionDelta(event);
+        callbacks.onTranscriptDelta?.(event?.delta || "");
         break;
       }
       default: {

@@ -17,8 +17,10 @@ type Props = {
   status: SessionStatus;
   error?: string | null;
   onSkip: () => void;
-  onContinue: () => void;
-  canContinue: boolean;
+  transcript?: string;
+  greetingName?: string;
+  onToggleVoice: () => void;
+  voiceEnabled: boolean;
 };
 
 const phaseCopy: Record<VoiceOnboardingPhase, { label: string; tone: "neutral" | "active" | "success" | "error" }> = {
@@ -32,22 +34,22 @@ const phaseCopy: Record<VoiceOnboardingPhase, { label: string; tone: "neutral" |
 
 function StatusDot({ phase }: { phase: VoiceOnboardingPhase }) {
   const tone = phaseCopy[phase].tone;
-  const base = "h-3 w-3 rounded-full";
+  const base = "h-3 w-3 rounded-full transition-all duration-600 ease-out";
   if (tone === "error") {
     return <span className={`${base} bg-red-400`} />;
   }
   if (tone === "success") {
     return (
       <span className="relative flex h-5 w-5 items-center justify-center">
-        <span className={`${base} bg-emerald-300 animate-ping absolute opacity-60`} />
-        <span className={`${base} bg-emerald-300 relative`} />
+        <span className={`${base} bg-emerald-300/60 animate-ping absolute opacity-50`} />
+        <span className={`${base} bg-emerald-300 relative shadow-[0_0_15px_rgba(16,185,129,0.4)]`} />
       </span>
     );
   }
   if (tone === "active") {
     return (
       <span className="relative flex h-5 w-5 items-center justify-center">
-        <span className={`${base} bg-[#EFEEEB]/70 animate-pulse absolute opacity-50`} />
+        <span className={`${base} bg-[#EFEEEB]/60 animate-pulse absolute opacity-50`} />
         <span className={`${base} bg-[#EFEEEB]/80 relative`} />
       </span>
     );
@@ -55,18 +57,46 @@ function StatusDot({ phase }: { phase: VoiceOnboardingPhase }) {
   return <span className={`${base} bg-[#EFEEEB]/60`} />;
 }
 
-export default function VoiceOnboardingOverlay({ visible, phase, status, error, onSkip, onContinue, canContinue }: Props) {
+function TypewriterText({ text }: { text: string }) {
+  const [display, setDisplay] = React.useState<string>("");
+  React.useEffect(() => {
+    if (!text) {
+      setDisplay("");
+      return;
+    }
+    setDisplay("");
+    let i = 0;
+    const interval = window.setInterval(() => {
+      i += 1;
+      setDisplay(text.slice(0, i));
+      if (i >= text.length) {
+        window.clearInterval(interval);
+      }
+    }, 18);
+    return () => window.clearInterval(interval);
+  }, [text]);
+  if (!text) return null;
+  return (
+    <p className="mt-3 max-w-[min(420px,88vw)] text-sm md:text-base leading-relaxed text-[#EFEEEB]/80 font-medium">
+      <span className="whitespace-pre-wrap">{display}</span>
+      <span className="inline-block w-2 animate-pulse">▋</span>
+    </p>
+  );
+}
+
+export default function VoiceOnboardingOverlay({ visible, phase, status, error, onSkip, transcript, greetingName, onToggleVoice, voiceEnabled }: Props) {
   const copy = phaseCopy[phase];
+  const heading = greetingName ? `Hey ${greetingName}` : "Hey there...";
 
   return (
     <div
       aria-hidden={!visible}
-      className={`fixed inset-0 z-[70] transition-opacity duration-500 ease-out ${
+      className={`fixed inset-0 z-[70] overflow-hidden transition-opacity duration-500 ease-out ${
         visible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
       }`}
     >
       <video
-        className="absolute inset-0 h-full w-full object-cover blur-lg"
+        className="absolute inset-0 h-full w-full object-cover blur-lg scale-110"
         src="/landing.mp4"
         poster="/og.png"
         autoPlay
@@ -78,7 +108,9 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
       <div className="relative z-10 flex min-h-full flex-col items-center justify-center gap-8 px-6 text-center text-[#EFEEEB]">
         <img src="/prosper_wordmark_offwhite.svg" alt="Prosper" className="h-12 w-auto md:h-14" />
         <div className="flex flex-col items-center gap-4 max-w-xl">
-          <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">Hey there...</h2>
+          <h2 className="text-3xl md:text-4xl font-semibold tracking-tight transition-all duration-500">
+            {heading}
+          </h2>
           <p className="text-base md:text-lg text-[#EFEEEB]/80">
             If you're able to talk, please allow your mic.
           </p>
@@ -94,6 +126,50 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
             </p>
           )}
         </div>
+        <TypewriterText text={transcript || ""} />
+        <button
+          type="button"
+          onClick={onToggleVoice}
+          className="inline-flex items-center gap-2 rounded-full border border-[#EFEEEB]/40 bg-transparent px-5 py-2 text-xs md:text-sm font-medium text-[#EFEEEB]/80 hover:bg-[#EFEEEB]/10"
+        >
+          {voiceEnabled ? (
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="#EFEEEB"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="opacity-90"
+            >
+              <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z" />
+              <path d="M5 11a7 7 0 0 0 14 0" />
+              <path d="M12 18v3" />
+            </svg>
+          ) : (
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="#EFEEEB"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="opacity-90"
+            >
+              <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z" />
+              <path d="M5 11a7 7 0 0 0 14 0" />
+              <path d="M12 18v3" />
+              <path d="M4 4l16 16" />
+            </svg>
+          )}
+          {voiceEnabled ? 'Mute' : 'Unmute'}
+        </button>
         <button
           type="button"
           onClick={onSkip}
@@ -101,15 +177,6 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
         >
           Prefer to type instead?
         </button>
-        {canContinue && (
-          <button
-            type="button"
-            onClick={onContinue}
-            className="inline-flex items-center justify-center rounded-full bg-[#EFEEEB] px-8 py-3 text-sm font-semibold text-[#083630] shadow-sm transition hover:opacity-90"
-          >
-            Continue to Prosper workspace
-          </button>
-        )}
       </div>
     </div>
   );
