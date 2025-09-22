@@ -156,6 +156,13 @@ export const update_profile = tool({
     // Keep slots inside inputs for persistence
     if (state.lastSlots) state.lastInputs = { ...(state.lastInputs || {}), slots: state.lastSlots };
     if (addBreadcrumb) addBreadcrumb('function call: updateProfile', { updatedKeys: Object.keys((input?.slots || {})) });
+    // Emit a UI event so Simple workspace can prefill fields live
+    try {
+      if (typeof window !== 'undefined') {
+        const detail = { inputs: input?.inputs || {}, slots: state.lastSlots || input?.slots || {} };
+        window.dispatchEvent(new CustomEvent('pp:onboarding_profile', { detail }));
+      }
+    } catch {}
     return { ok: true };
   },
 });

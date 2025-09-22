@@ -222,6 +222,7 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
         <button
           type="button"
           onClick={onToggleVoice}
+          aria-label={voiceEnabled ? 'Mute voice' : 'Unmute voice'}
           className="inline-flex items-center gap-2 rounded-full border border-[#EFEEEB]/40 bg-transparent px-5 py-2 text-xs md:text-sm font-medium text-[#EFEEEB]/80 hover:bg-[#EFEEEB]/10"
         >
           {voiceEnabled ? (

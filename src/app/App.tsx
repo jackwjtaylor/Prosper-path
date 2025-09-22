@@ -84,7 +84,11 @@ function App() {
   const voiceIntroEngagedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [voiceIntroSegments, setVoiceIntroSegments] = useState<Array<{ speaker: 'assistant' | 'user'; text: string }>>([]);
   const [voiceIntroName, setVoiceIntroName] = useState<string>("");
+  const lastUserTurnRef = useRef<number>(0);
+  const nudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handoffPendingRef = useRef<boolean>(false);
   const updatePersona = useOnboardingStore(s => s.updatePersona);
+  const updateDraft = useOnboardingStore(s => s.updateDraft);
   useEffect(() => { ensureHouseholdId().then(setHouseholdId); }, []);
   useEffect(() => {
     if (!isVoiceOnboardingEnabled) return;
@@ -112,6 +116,7 @@ function App() {
         const inputs = (e?.detail?.inputs || {}) as Record<string, any>;
         const slots = (e?.detail?.slots || {}) as Record<string, any>;
         const persona: any = {};
+        const draft: any = {};
         // Name
         const fullName = inputs.full_name || slots.full_name?.value || inputs.name;
         if (typeof fullName === 'string' && fullName.trim()) persona.name = fullName.trim().split(' ')[0];
@@ -142,16 +147,31 @@ function App() {
           const decade = Math.floor(age / 10) * 10;
           if (decade >= 10) persona.ageDecade = (decade.toString() + 's') as any;
         }
+        // Draft financials from slots if present
+        const toNum = (v: any) => {
+          const n = Number(v);
+          return Number.isFinite(n) ? n : undefined;
+        };
+        if (slots.net_income_monthly_self?.value != null) draft.netIncomeSelf = toNum(slots.net_income_monthly_self.value);
+        if (slots.net_income_monthly_partner?.value != null) draft.netIncomePartner = toNum(slots.net_income_monthly_partner.value);
+        if (slots.essential_expenses_monthly?.value != null) draft.essentialExp = toNum(slots.essential_expenses_monthly.value);
+        const hs = slots.housing_status?.value || inputs.housing_status;
+        if (hs === 'rent' || hs === 'own' || hs === 'other') draft.housing = hs;
+        if (slots.rent_monthly?.value != null) draft.rent = toNum(slots.rent_monthly.value);
+        if (slots.mortgage_payment_monthly?.value != null) draft.mortgagePmt = toNum(slots.mortgage_payment_monthly.value);
+        if (slots.cash_liquid_total?.value != null) draft.cash = toNum(slots.cash_liquid_total.value);
+        if (slots.other_debt_payments_monthly_total?.value != null) draft.debtPmts = toNum(slots.other_debt_payments_monthly_total.value);
+        if (slots.other_debt_balances_total?.value != null) draft.debtTotal = toNum(slots.other_debt_balances_total.value);
+        draft.rawSlots = slots as any;
         updatePersona(persona);
+        if (Object.keys(draft).length) updateDraft(draft);
       } catch {}
     };
     const onFinish = () => {
       try {
-        const url = new URL(window.location.href);
-        const agentConfig = (url.searchParams.get('agentConfig') || '').toLowerCase();
-        const source = (url.searchParams.get('source') || '').toLowerCase();
-        const v2 = agentConfig === 'onboardingv2' && source === 'landing-simple';
-        if (v2) router.push('/simple');
+        // Mark handoff pending; route after the assistant finishes this utterance
+        handoffPendingRef.current = true;
+        try { sessionStorage.setItem('pp_simple_coach', '1'); } catch {}
       } catch {}
     };
     window.addEventListener('pp:onboarding_profile', onProfile as any);
@@ -188,9 +208,18 @@ function App() {
   // Allow UI components to toggle the voice connection globally
   useEffect(() => {
     const onToggle = () => { onToggleConnection(); };
+    const onDisconnect = () => { try { disconnectFromRealtime(); } catch {} };
     window.addEventListener('pp:toggle_connection', onToggle as any);
+    window.addEventListener('pp:disconnect_voice', onDisconnect as any);
     return () => window.removeEventListener('pp:toggle_connection', onToggle as any);
   }, [sessionStatus]);
+
+  // Ensure realtime session is closed when this page unmounts
+  useEffect(() => {
+    return () => {
+      try { disconnectFromRealtime(); } catch {}
+    };
+  }, []);
   useEffect(() => {
     (async () => {
       if (!householdId) return;
@@ -277,8 +306,41 @@ function App() {
           }
           return next;
         });
+        // Assistant spoke — clear any pending nudge
+        if (nudgeTimerRef.current) { clearTimeout(nudgeTimerRef.current); nudgeTimerRef.current = null; }
+        // If onboarding requested a handoff, route after this turn completes
+        if (handoffPendingRef.current) {
+          handoffPendingRef.current = false;
+          setTimeout(() => {
+            try {
+              const url = new URL(window.location.href);
+              const agentConfig = (url.searchParams.get('agentConfig') || '').toLowerCase();
+              const source = (url.searchParams.get('source') || '').toLowerCase();
+              const v2 = agentConfig === 'onboardingv2' && source === 'landing-simple';
+              if (v2) router.push('/simple');
+            } catch {}
+          }, 300);
+        }
       } else {
         setVoiceIntroSegments(prev => [...prev, { speaker: 'user', text }]);
+        // Record time of last user turn for onboarding nudge
+        lastUserTurnRef.current = Date.now();
+        // If overlay is active and onboarding is enabled, schedule a gentle nudge to continue
+        if (showVoiceIntro && isVoiceOnboardingEnabled) {
+          if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current);
+          nudgeTimerRef.current = setTimeout(() => {
+            // If no assistant response since the user spoke, prompt a continuation
+            const elapsed = Date.now() - lastUserTurnRef.current;
+            if (elapsed >= 1500) {
+              try {
+                sendClientEvent({
+                  type: 'response.create',
+                  instructions: 'Acknowledge briefly, then continue with the next onboarding question. Keep it short and natural.'
+                }, 'voice_onboarding_nudge');
+              } catch {}
+            }
+          }, 1500);
+        }
       }
       if (!voiceIntroName) {
         const match = text.match(/\b(?:i'm|i am|my name is)\s+([A-Z][a-zA-Z-' ]+)/i);
@@ -333,6 +395,22 @@ function App() {
       // Configure session detection, then send initial simulated message
       updateSession();
       (async () => {
+        // If coming from Simple with an explain request, handle that first
+        try {
+          const raw = localStorage.getItem('pp_explain_action');
+          if (raw) {
+            const payload = JSON.parse(raw);
+            localStorage.removeItem('pp_explain_action');
+            const title = (payload?.title || payload?.id || '').toString();
+            if (title) {
+              const text = `Please explain the action "${title}" in plain language: why it matters, the rationale, and what steps I need to take. Keep it concise and ask me to confirm I’m ready to do it.`;
+              sendSimulatedUserMessage(text);
+              // Ensure chat is visible
+              try { window.dispatchEvent(new CustomEvent('pp:open_chat', { detail: { text: '' } })); } catch {}
+              return; // skip other initial prompts
+            }
+          }
+        } catch {}
         if (isReturningUser) {
           try {
             const res = await fetch(`/api/prosper/dashboard?householdId=${householdId}`, { cache: 'no-store' });
@@ -528,6 +606,7 @@ function App() {
         clearTimeout(voiceIntroEngagedTimeoutRef.current);
         voiceIntroEngagedTimeoutRef.current = null;
       }
+      if (nudgeTimerRef.current) { clearTimeout(nudgeTimerRef.current); nudgeTimerRef.current = null; }
     };
   }, []);
 

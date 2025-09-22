@@ -2,6 +2,9 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useRealtimeSession } from '@/app/hooks/useRealtimeSession';
+import { makeRealtimeAgent } from '@/app/agentConfigs/realtimeOnly';
+import { useAppStore } from '@/app/state/store';
 import { useOnboardingStore } from '@/app/state/onboarding';
 import { ensureHouseholdId } from '@/app/lib/householdLocal';
 
@@ -17,6 +20,7 @@ function Chip({ children }: { children: React.ReactNode }) {
 
 function PersonaBanner() {
   const persona = useOnboardingStore((s) => s.persona);
+  const draft = useOnboardingStore((s) => s.draft);
   const chips: string[] = [];
   if (persona.ageDecade && persona.ageDecade !== 'unspecified') chips.push(persona.ageDecade);
   if (persona.city && persona.country) chips.push(`${persona.city}, ${persona.country}`);
@@ -51,8 +55,16 @@ function ProgressTracker({ step }: { step: 1|2|3 }) {
 export default function SimpleWorkspace() {
   const router = useRouter();
   const persona = useOnboardingStore((s) => s.persona);
+  const draft = useOnboardingStore((s) => s.draft);
+  const selectedVoice = useAppStore(s => s.voice);
   const [householdId, setHouseholdId] = React.useState<string>('');
   React.useEffect(() => { ensureHouseholdId().then(setHouseholdId); }, []);
+  // Reveal animation on first mount (fade + gentle lift)
+  const [animateIn, setAnimateIn] = React.useState(false);
+  React.useEffect(() => {
+    const t = setTimeout(() => setAnimateIn(true), 60);
+    return () => clearTimeout(t);
+  }, []);
 
   // Snapshot fields (minimal set to compute)
   const [netIncomeSelf, setNetIncomeSelf] = React.useState<string>('');
@@ -69,6 +81,139 @@ export default function SimpleWorkspace() {
   const [error, setError] = React.useState<string | null>(null);
   const [built, setBuilt] = React.useState<boolean>(false);
   const [selected, setSelected] = React.useState<string[]>([]);
+  const [unlocked, setUnlocked] = React.useState<Set<string>>(new Set());
+
+  // Lightweight inline voice explain dialog state
+  const [explainOpen, setExplainOpen] = React.useState(false);
+  const [explainingTitle, setExplainingTitle] = React.useState<string>('');
+  const [explainLogs, setExplainLogs] = React.useState<Array<{ speaker: 'assistant'|'user'; text: string }>>([]);
+  const [checklist, setChecklist] = React.useState<string[]>([]);
+  const [checked, setChecked] = React.useState<Record<string, boolean>>({});
+  const [celebrateOn, setCelebrateOn] = React.useState(false);
+  const [celebrateKey, setCelebrateKey] = React.useState(0);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const coachAudioRef = React.useRef<HTMLAudioElement | null>(null);
+  const { status: explainStatus, connect: explainConnect, disconnect: explainDisconnect, sendUserText: explainSendText, sendEvent: explainSendEvent, interrupt: explainInterrupt } = useRealtimeSession({
+    onTranscriptDelta: (delta, speaker) => {
+      if (!delta || speaker !== 'assistant') return;
+      setExplainLogs(prev => {
+        const next = [...prev];
+        if (!next.length || next[next.length - 1].speaker !== 'assistant') next.push({ speaker: 'assistant', text: '' });
+        next[next.length - 1] = { speaker: 'assistant', text: (next[next.length - 1].text + delta) };
+        return next;
+      });
+    },
+    onTranscriptCompleted: (text, speaker) => {
+      if (!text) return;
+      setExplainLogs(prev => [...prev, { speaker, text }]);
+    }
+  });
+  const isExplainingConnected = explainStatus === 'CONNECTED';
+
+  // Coach session to continue voice onboarding on arrival
+  const { status: coachStatus, connect: coachConnect, disconnect: coachDisconnect, sendUserText: coachSendText, sendEvent: coachSendEvent, interrupt: coachInterrupt } = useRealtimeSession();
+  const isCoachConnected = coachStatus === 'CONNECTED';
+  React.useEffect(() => {
+    const fromOnboarding = typeof window !== 'undefined' ? (sessionStorage.getItem('pp_simple_coach') === '1') : false;
+    if (!fromOnboarding) return;
+    (async () => {
+      try { sessionStorage.removeItem('pp_simple_coach'); } catch {}
+      if (!coachAudioRef.current && typeof window !== 'undefined') {
+        const el = document.createElement('audio');
+        el.autoplay = true; el.style.display = 'none';
+        document.body.appendChild(el);
+        coachAudioRef.current = el;
+      }
+      const getEphemeralKey = async () => {
+        const res = await fetch('/api/session');
+        const data = await res.json();
+        if (!data.client_secret?.value) return null;
+        return { key: data.client_secret.value as string, model: (data.model as string | undefined) };
+      };
+      if (!isCoachConnected) {
+        try { await coachConnect({ getEphemeralKey, initialAgents: [makeRealtimeAgent(selectedVoice || 'cedar')], audioElement: coachAudioRef.current! }); } catch {}
+      }
+      try {
+        coachInterrupt();
+        coachSendText('Alright — let’s jot your quick Money Snapshot together. First, what’s your monthly take‑home pay?');
+        coachSendEvent({ type: 'response.create' });
+      } catch {}
+    })();
+    // Clean up on unmount
+    return () => { try { coachDisconnect(); } catch {} };
+  }, []);
+  // Support global disconnect
+  React.useEffect(() => {
+    const onDisc = () => { try { coachDisconnect(); } catch {} };
+    window.addEventListener('pp:disconnect_voice', onDisc as any);
+    return () => window.removeEventListener('pp:disconnect_voice', onDisc as any);
+  }, [coachDisconnect]);
+  // Auto-fill after snapshot saved by voice
+  React.useEffect(() => {
+    const onSaved = async () => {
+      try {
+        const res = await fetch(`/api/prosper/dashboard?householdId=${encodeURIComponent(householdId)}`, { cache: 'no-store' });
+        const j = await res.json();
+        const slots = (j?.latestSnapshot?.inputs?.slots || {}) as Record<string, any>;
+        const setIfEmpty = (cur: string, next?: number) => (cur === '' && typeof next === 'number' ? String(next) : cur);
+        const toNum = (v: any) => { const n = Number(v); return Number.isFinite(n) ? n : undefined; };
+        setNetIncomeSelf((cur) => setIfEmpty(cur, toNum(slots?.net_income_monthly_self?.value)));
+        setNetIncomePartner((cur) => setIfEmpty(cur, toNum(slots?.net_income_monthly_partner?.value)));
+        setEssentialExp((cur) => setIfEmpty(cur, toNum(slots?.essential_expenses_monthly?.value)));
+        const hs = slots?.housing_status?.value; if ((hs === 'rent' || hs === 'own' || hs === 'other') && housing !== hs) setHousing(hs);
+        if (hs === 'rent') setRent((cur) => setIfEmpty(cur, toNum(slots?.rent_monthly?.value)));
+        if (hs === 'own') setMortgagePmt((cur) => setIfEmpty(cur, toNum(slots?.mortgage_payment_monthly?.value)));
+        setCash((cur) => setIfEmpty(cur, toNum(slots?.cash_liquid_total?.value)));
+        setDebtPmts((cur) => setIfEmpty(cur, toNum(slots?.other_debt_payments_monthly_total?.value)));
+        setDebtTotal((cur) => setIfEmpty(cur, toNum(slots?.other_debt_balances_total?.value)));
+      } catch {}
+    };
+    window.addEventListener('pp:snapshot_saved', onSaved as any);
+    return () => window.removeEventListener('pp:snapshot_saved', onSaved as any);
+  }, [householdId, housing]);
+
+  async function openExplain(title: string) {
+    setExplainingTitle(title);
+    setExplainOpen(true);
+    setExplainLogs([]);
+    // Build a short checklist tailored to the action
+    const steps = buildChecklist(title);
+    setChecklist(steps);
+    const init: Record<string, boolean> = {}; steps.forEach((s) => { init[s] = false; });
+    setChecked(init);
+    // Ask any background voice session to disconnect to avoid overlap
+    try { window.dispatchEvent(new CustomEvent('pp:disconnect_voice')); } catch {}
+    // Ensure audio element exists
+    if (!audioRef.current && typeof window !== 'undefined') {
+      const el = document.createElement('audio');
+      el.autoplay = true; el.style.display = 'none';
+      document.body.appendChild(el);
+      audioRef.current = el;
+    }
+    if (!isExplainingConnected) {
+      const getEphemeralKey = async () => {
+        const res = await fetch('/api/session');
+        const data = await res.json();
+        if (!data.client_secret?.value) return null;
+        return { key: data.client_secret.value as string, model: (data.model as string | undefined) };
+      };
+      try {
+        await explainConnect({ getEphemeralKey, initialAgents: [makeRealtimeAgent(selectedVoice || 'cedar')], audioElement: audioRef.current! });
+      } catch {}
+    }
+    // Send the explanation prompt
+    try {
+      const text = `Please explain the action "${title}" in plain language. Cover: what it is, why it matters for improving my finances, and the steps I need to take. Keep it brief and ask me to confirm I’m ready to do it.`;
+      explainInterrupt();
+      explainSendText(text);
+      explainSendEvent({ type: 'response.create' });
+    } catch {}
+  }
+
+  function closeExplain() {
+    setExplainOpen(false);
+    try { explainDisconnect(); } catch {}
+  }
 
   const log = async (event: string, extra: Record<string, any> = {}) => {
     try {
@@ -137,12 +282,12 @@ export default function SimpleWorkspace() {
     tiles.push({ id: 'insurance-protection', title: 'Protect yourself with insurance', blurb: 'Cover the big wipe‑outs so progress sticks.', gated: !familyOrHome, recommended: familyOrHome, reason: familyOrHome ? undefined : 'We can line this up after your basics.' });
 
     // Savings progression
-    tiles.push({ id: 'emergency-fund-3m', title: 'Increase your emergency fund', blurb: 'Grow your cushion to ~3 months for real security.', gated: true });
+    tiles.push({ id: 'emergency-fund-3m', title: 'Increase your emergency fund', blurb: 'Grow your cushion to ~3 months for real security.', gated: !unlocked.has('emergency-fund-3m') });
 
     // Automation & investing (gate until foundations + cash buffer and no unhealthy debt)
-    tiles.push({ id: 'prosper-pots', title: 'Set up your Prosper Pots', blurb: 'Automate your money so good choices happen by default.', gated: true });
-    tiles.push({ id: 'invest-automation', title: 'Automate your investing', blurb: 'Tax‑efficient, automatic contributions toward long‑term growth.', gated: true });
-    tiles.push({ id: 'invest-long-term', title: 'Invest for long‑term growth', blurb: 'Put your Prosper cash to work steadily over time.', gated: true });
+    tiles.push({ id: 'prosper-pots', title: 'Set up your Prosper Pots', blurb: 'Automate your money so good choices happen by default.', gated: !unlocked.has('prosper-pots') });
+    tiles.push({ id: 'invest-automation', title: 'Automate your investing', blurb: 'Tax‑efficient, automatic contributions toward long‑term growth.', gated: !unlocked.has('invest-automation') });
+    tiles.push({ id: 'invest-long-term', title: 'Invest for long‑term growth', blurb: 'Put your Prosper cash to work steadily over time.', gated: !unlocked.has('invest-long-term') });
 
     // Recommend at most two
     const recs = tiles.filter(t => t.recommended && !t.gated).slice(0, 2);
@@ -150,7 +295,7 @@ export default function SimpleWorkspace() {
     if (selected.length === 0 && recs.length) setSelected(recs.map(r => r.id));
     return tiles;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [netIncomeSelf, netIncomePartner, hasPartner, essentialExp, rent, mortgagePmt, cash, debtPmts, debtTotal, persona.childrenCount, persona.primaryGoal, housing]);
+  }, [netIncomeSelf, netIncomePartner, hasPartner, essentialExp, rent, mortgagePmt, cash, debtPmts, debtTotal, persona.childrenCount, persona.primaryGoal, housing, unlocked]);
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -202,8 +347,19 @@ export default function SimpleWorkspace() {
       } else {
         log('simple_build_plan', { selected });
         setBuilt(true);
-        // Head to the main app (dashboard) to continue with actions
-        router.push('/app/app');
+        // After snapshot, fetch dashboard to derive gating unlocks
+        try {
+          const resDash = await fetch(`/api/prosper/dashboard?householdId=${encodeURIComponent(householdId)}`, { cache: 'no-store' });
+          const j = await resDash.json();
+          const k = j?.latestSnapshot?.kpis || {};
+          const ef = Number(k?.ef_months || 0);
+          const dti = Number(k?.dti_stock || 0);
+          const nu = new Set<string>();
+          if (ef >= 1) nu.add('prosper-pots');
+          if (ef >= 3) { nu.add('emergency-fund-3m'); nu.add('invest-automation'); }
+          if (ef >= 3 && (!Number.isFinite(dti) || dti < 0.3)) nu.add('invest-long-term');
+          setUnlocked(nu);
+        } catch {}
       }
     } catch (e: any) {
       setError('Something went wrong while saving.');
@@ -211,6 +367,137 @@ export default function SimpleWorkspace() {
       setSaving(false);
     }
   };
+
+  const explainTile = (tile: { id: string; title: string }) => {
+    openExplain(tile.title);
+  };
+
+  function buildChecklist(title: string): string[] {
+    const t = title.toLowerCase();
+    if (t.includes('emergency') && t.includes('first')) return [
+      'Decide your buffer target (e.g., 1 month of essentials)',
+      'Choose where to hold it (easy-access savings)',
+      'Set up a monthly transfer amount',
+    ];
+    if (t.includes('increase your emergency')) return [
+      'Confirm new target (≈3 months of essentials)',
+      'Schedule or increase the monthly top-up',
+      'Review in 60 days to adjust',
+    ];
+    if (t.includes('clear your unhealthy debts')) return [
+      'List balances, APRs, and minimums',
+      'Pick a payoff order (highest APR first)',
+      'Set an extra payment this month',
+    ];
+    if (t.includes('manage your expenses')) return [
+      'Identify top 3 recurring spends to trim',
+      'Set a weekly spending amount',
+      'Cancel or downgrade one subscription',
+    ];
+    if (t.includes('boost your income')) return [
+      'Pick one income idea to try this month',
+      'Block 2 hours in your calendar',
+      'Send one message or application',
+    ];
+    if (t.includes('prosper pots')) return [
+      'Decide pot names (Protect/Grow/Enjoy)',
+      'Set target % for each pot',
+      'Create standing orders to the pots',
+    ];
+    if (t.includes('automate your investing')) return [
+      'Choose the account (ISA/401k/brokerage)',
+      'Set a monthly contribution amount',
+      'Schedule the transfer on payday',
+    ];
+    if (t.includes('invest for long')) return [
+      'Confirm your long-term timeframe',
+      'Choose a simple diversified fund',
+      'Enable automatic contributions',
+    ];
+    if (t.includes('improve your credit')) return [
+      'Check your credit report for errors',
+      'Set reminders for on-time payments',
+      'Lower utilisation by an extra payment',
+    ];
+    if (t.includes('buy your first home')) return [
+      'Decide a deposit target and timeline',
+      'Open or confirm the best savings account',
+      'Start a monthly saving schedule',
+    ];
+    if (t.includes('pay off your home')) return [
+      'Check overpayment rules with your lender',
+      'Pick a comfortable monthly overpayment',
+      'Set the overpayment and monitor impact',
+    ];
+    if (t.includes('protect yourself with insurance')) return [
+      'Decide what to cover (life/income/home)',
+      'Get 2 quotes to compare',
+      'Set up the policy and note renewal date',
+    ];
+    // Foundations
+    if (t.includes('have the money talk')) return [
+      'Pick a calm time and place',
+      'Share goals and any money worries',
+      'Agree a regular 20‑minute check-in',
+    ];
+    if (t.includes('get your £hit together') || t.includes('get your')) return [
+      'List your accounts and cards',
+      'Close/merge any you don’t use',
+      'Collect logins in a safe place',
+    ];
+    if (t.includes('set your foundations')) return [
+      'Learn your 3 key numbers (income/essentials/cash)',
+      'Understand emergency funds and savings rate',
+      'Decide your first two actions',
+    ];
+    return [
+      'Decide your target and timeline',
+      'Pick one concrete next step',
+      'Schedule time to do it this week',
+    ];
+  }
+
+  // Prefill from voice onboarding draft
+  React.useEffect(() => {
+    if (!draft) return;
+    const setIfEmpty = (cur: string, next?: number) => (cur === '' && typeof next === 'number' ? String(next) : cur);
+    setHasPartner((prev) => prev || !!persona.partner);
+    setNetIncomeSelf((cur) => setIfEmpty(cur, draft.netIncomeSelf));
+    setNetIncomePartner((cur) => setIfEmpty(cur, draft.netIncomePartner));
+    setEssentialExp((cur) => setIfEmpty(cur, draft.essentialExp));
+    setCash((cur) => setIfEmpty(cur, draft.cash));
+    setDebtPmts((cur) => setIfEmpty(cur, draft.debtPmts));
+    setDebtTotal((cur) => setIfEmpty(cur, draft.debtTotal));
+    if (draft.housing && housing === 'rent' && draft.housing !== 'rent') setHousing(draft.housing);
+    if (draft.housing === 'rent') setRent((cur) => setIfEmpty(cur, draft.rent));
+    if (draft.housing === 'own') setMortgagePmt((cur) => setIfEmpty(cur, draft.mortgagePmt));
+  }, [draft?.netIncomeSelf, draft?.netIncomePartner, draft?.essentialExp, draft?.cash, draft?.debtPmts, draft?.debtTotal, draft?.housing, draft?.rent, draft?.mortgagePmt, persona.partner]);
+
+  // Listen live for onboarding profile events while on Simple (in case agent adds more numbers later)
+  React.useEffect(() => {
+    const handler = (e: any) => {
+      try {
+        const slots = (e?.detail?.slots || {}) as Record<string, any>;
+        const val = (k: string) => {
+          const v = slots?.[k]?.value;
+          const n = Number(v);
+          return Number.isFinite(n) ? String(n) : '';
+        };
+        if (!netIncomeSelf) setNetIncomeSelf(val('net_income_monthly_self'));
+        if (hasPartner && !netIncomePartner) setNetIncomePartner(val('net_income_monthly_partner'));
+        if (!essentialExp) setEssentialExp(val('essential_expenses_monthly'));
+        const hs = slots?.housing_status?.value as any;
+        if ((hs === 'rent' || hs === 'own' || hs === 'other') && housing !== hs) setHousing(hs);
+        if (!rent && housing === 'rent') setRent(val('rent_monthly'));
+        if (!mortgagePmt && housing === 'own') setMortgagePmt(val('mortgage_payment_monthly'));
+        if (!cash) setCash(val('cash_liquid_total'));
+        if (!debtPmts) setDebtPmts(val('other_debt_payments_monthly_total'));
+        if (!debtTotal) setDebtTotal(val('other_debt_balances_total'));
+      } catch {}
+    };
+    window.addEventListener('pp:onboarding_profile', handler as any);
+    return () => window.removeEventListener('pp:onboarding_profile', handler as any);
+  }, [netIncomeSelf, netIncomePartner, essentialExp, rent, mortgagePmt, cash, debtPmts, debtTotal, housing, hasPartner]);
 
   return (
     <div className="relative z-10 min-h-[100svh] w-full">
@@ -226,7 +513,7 @@ export default function SimpleWorkspace() {
       <section className="relative flex min-h-[100svh] items-center justify-center py-24">
         <div className="mx-auto max-w-[1040px] w-full px-6">
           <div className="mx-auto max-w-[840px] w-full">
-            <div className="rounded-2xl border border-white/10 bg-white/10 backdrop-blur-md p-6 md:p-8 shadow-xl">
+            <div className={`rounded-2xl border border-white/10 bg-white/10 backdrop-blur-md p-6 md:p-8 shadow-xl transition-all duration-500 ease-out ${animateIn ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-[0.98]'}`}>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-2xl md:text-3xl font-semibold text-white">Welcome{persona?.name ? `, ${persona.name}` : ''}</h2>
@@ -289,14 +576,8 @@ export default function SimpleWorkspace() {
                 <div className="text-sm text-white/80 mb-2">Recommended starting points</div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {planTiles.map(tile => (
-                    <button
+                    <div
                       key={tile.id}
-                      type="button"
-                      role="switch"
-                      aria-checked={selected.includes(tile.id)}
-                      aria-label={`Action: ${tile.title}${tile.gated ? ' (coming soon)' : ''}`}
-                      onClick={() => !tile.gated && toggleSelect(tile.id)}
-                      disabled={!!tile.gated}
                       className={`text-left rounded-xl border p-4 transition ${
                         tile.gated
                           ? 'border-white/10 bg-white/5 text-white/50 cursor-not-allowed'
@@ -304,6 +585,7 @@ export default function SimpleWorkspace() {
                             ? 'border-emerald-400/60 bg-emerald-400/10 text-white'
                             : 'border-white/15 bg-white/8 text-white/90 hover:bg-white/12'
                       }`}
+                      onClick={() => { if (!tile.gated) openExplain(tile.title); }}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -312,15 +594,23 @@ export default function SimpleWorkspace() {
                           {tile.reason && <div className="text-[11px] mt-1 opacity-70">{tile.reason}</div>}
                         </div>
                         {!tile.gated && (
-                          <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full border text-xs ${selected.includes(tile.id) ? 'border-emerald-300 bg-emerald-300/20' : 'border-white/30'}`}>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); toggleSelect(tile.id); }}
+                            role="switch"
+                            aria-checked={selected.includes(tile.id)}
+                            aria-label={`Select action: ${tile.title}`}
+                            className={`inline-flex h-6 w-6 items-center justify-center rounded-full border text-xs ${selected.includes(tile.id) ? 'border-emerald-300 bg-emerald-300/20' : 'border-white/30'}`}
+                          >
                             {selected.includes(tile.id) ? '✓' : '+'}
-                          </span>
+                          </button>
                         )}
                         {tile.gated && (
                           <span className="text-[10px] px-2 py-1 rounded-full border border-white/20">Coming soon</span>
                         )}
                       </div>
-                    </button>
+                      {/* Removed extra 'Explain this' link to reduce UI noise; whole tile opens explain */}
+                    </div>
                   ))}
                 </div>
                 <div className="text-xs text-white/70 mt-2">Pick up to two. We’ll unlock more after your first wins.</div>
@@ -339,17 +629,96 @@ export default function SimpleWorkspace() {
         </div>
       </section>
 
+      {explainOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-end md:items-center justify-center">
+          <div className="w-full md:w-[720px] max-h-[80vh] bg-[#05221E] text-white rounded-t-2xl md:rounded-2xl border border-white/10 shadow-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+              <div className="font-medium">Prosper — {explainingTitle}</div>
+              <button onClick={closeExplain} className="text-sm underline">Close</button>
+            </div>
+            <div className="p-4 space-y-3 max-h-[58vh] overflow-y-auto">
+              {explainLogs.length === 0 ? (
+                <div className="text-sm text-white/70">Loading…</div>
+              ) : (
+                explainLogs.map((m, i) => (
+                  <div key={i} className="text-sm">
+                    <div className="text-[10px] uppercase tracking-widest text-white/50">{m.speaker === 'assistant' ? 'Prosper' : 'You'}</div>
+                    <div className={m.speaker === 'assistant' ? 'text-white/90' : 'text-white/80'}>{m.text}</div>
+                  </div>
+                ))
+              )}
+              {/* Checklist */}
+              <div className="mt-2">
+                <div className="text-xs text-white/70 mb-1">Checklist</div>
+                <ul className="space-y-2">
+                  {checklist.map((s) => (
+                    <li key={s} className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={!!checked[s]}
+                        onChange={(e) => setChecked((prev) => ({ ...prev, [s]: e.target.checked }))}
+                        className="mt-0.5"
+                        aria-label={`Mark step done: ${s}`}
+                      />
+                      <span className="text-sm text-white/90">{s}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <div className="px-4 py-3 border-t border-white/10 flex items-center gap-2">
+              <button
+                onClick={() => { try { explainInterrupt(); explainSendText('Can you go a bit deeper on why this matters right now for me?'); explainSendEvent({ type: 'response.create' }); } catch {} }}
+                className="rounded-full border border-white/20 hover:bg-white/10 px-4 py-1.5 text-sm"
+              >
+                Why now?
+              </button>
+              <button
+                disabled={!checklist.every((s) => !!checked[s])}
+                onClick={async () => {
+                  // Mark done
+                  try { await fetch('/api/actions/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: explainingTitle, action_id: explainingTitle.toLowerCase().replace(/[^a-z0-9]+/g,'-') }) }); } catch {}
+                  // Voice celebration
+                  try { explainInterrupt(); explainSendText(`Nice work — you just completed ${explainingTitle}. Take a second to notice what helped.`); explainSendEvent({ type: 'response.create' }); } catch {}
+                  // Local confetti
+                  setCelebrateKey((k) => k + 1); setCelebrateOn(true); setTimeout(() => setCelebrateOn(false), 2200);
+                }}
+                className="rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-4 py-1.5 text-sm"
+              >
+                Mark done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confetti overlay for Simple page */}
+      {celebrateOn && (
+        <div key={celebrateKey} className="fixed inset-0 pointer-events-none z-[9999] overflow-hidden">
+          {Array.from({ length: 120 }).map((_, i) => {
+            const left = Math.random() * 100;
+            const w = 10 + Math.random() * 14;
+            const h = 6 + Math.random() * 10;
+            const delay = Math.random() * 0.3;
+            const dur = 2 + Math.random() * 0.5;
+            const hue = Math.floor(120 + Math.random() * 80);
+            const drift = Math.random() < 0.5 ? 'confetti-left' : 'confetti-right';
+            return (
+              <div key={`c-${celebrateKey}-${i}`} style={{ position: 'absolute', top: '-5vh', left: `${left}vw`, width: w, height: h, backgroundColor: `hsl(${hue} 70% 55%)`, opacity: 0.9, transform: 'rotate(15deg)', animation: `${drift} ${dur}s ease-out ${delay}s forwards`, borderRadius: 2 }} />
+            );
+          })}
+          <style jsx>{`
+            @keyframes confetti-left { 0% { transform: translate3d(0,-100vh,0) rotate(0deg); opacity: 1; } 100% { transform: translate3d(-30vw,100vh,0) rotate(1080deg); opacity: 0; } }
+            @keyframes confetti-right { 0% { transform: translate3d(0,-100vh,0) rotate(0deg); opacity: 1; } 100% { transform: translate3d(30vw,100vh,0) rotate(-1080deg); opacity: 0; } }
+          `}</style>
+        </div>
+      )}
+
       {/* Voice dock placeholder to match app style */}
       <div className="hidden md:block fixed bottom-4 right-4 z-30">
-        <Link href="/app/app" className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm text-white/90 hover:bg-white/20">Open full app</Link>
+        <Link href="/app" className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm text-white/90 hover:bg-white/20">Open full app</Link>
       </div>
-      <style jsx global>{`
-        .field { width: 100%; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: transparent; padding: 10px 12px; color: #fff; outline: none; }
-        .field::placeholder { color: rgba(255,255,255,0.4); }
-        .btn { border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.06); padding: 6px 10px; border-radius: 999px; color: #fff; }
-        .btn-active { border-color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.15); }
-        button:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(110,231,183,0.8); }
-      `}</style>
+      {/* Styles moved to globals.css: .field, .btn, .btn-active, focus-visible ring */}
     </div>
   );
 }

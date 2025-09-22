@@ -21,14 +21,29 @@ export type OnboardingPersona = {
 
 export type OnboardingStage = 'intro'|'profile'|'promise'|'intent'|'contact'|'summary'|'done';
 
+export type OnboardingDraft = {
+  netIncomeSelf?: number;
+  netIncomePartner?: number;
+  essentialExp?: number;
+  housing?: 'rent'|'own'|'other';
+  rent?: number;
+  mortgagePmt?: number;
+  cash?: number;
+  debtPmts?: number;
+  debtTotal?: number;
+  rawSlots?: Record<string, { value: any; confidence?: string }>;
+};
+
 type OnboardingState = {
   stage: OnboardingStage;
   persona: OnboardingPersona;
+  draft: OnboardingDraft;
 };
 
 type OnboardingActions = {
   setStage: (s: OnboardingStage) => void;
   updatePersona: (p: Partial<OnboardingPersona>) => void;
+  updateDraft: (d: Partial<OnboardingDraft>) => void;
   reset: () => void;
 };
 
@@ -46,8 +61,10 @@ function read<T>(key: string, fallback: T): T {
 let obState: OnboardingStore = {
   stage: typeof window !== 'undefined' ? read<OnboardingStage>('ob_stage', 'intro') : 'intro',
   persona: typeof window !== 'undefined' ? read<OnboardingPersona>('ob_persona', {}) : {},
+  draft: typeof window !== 'undefined' ? read<OnboardingDraft>('ob_draft', {}) : {},
   setStage: (s) => setState({ stage: s }),
   updatePersona: (p) => setState({ persona: { ...obState.persona, ...(p || {}) } }),
+  updateDraft: (d) => setState({ draft: { ...obState.draft, ...(d || {}) } }),
   reset: () => setState({ stage: 'intro', persona: {} }),
 };
 
@@ -56,6 +73,7 @@ function setState(partial: Partial<OnboardingState>) {
   try {
     localStorage.setItem('ob_stage', JSON.stringify(obState.stage));
     localStorage.setItem('ob_persona', JSON.stringify(obState.persona));
+    localStorage.setItem('ob_draft', JSON.stringify(obState.draft));
   } catch {}
   listeners.forEach((l) => l());
 }
@@ -70,4 +88,3 @@ function getState(): OnboardingStore { return obState; }
 export function useOnboardingStore<T>(selector: (s: OnboardingStore) => T): T {
   return useSyncExternalStore(subscribe, () => selector(getState()), () => selector(getState()));
 }
-

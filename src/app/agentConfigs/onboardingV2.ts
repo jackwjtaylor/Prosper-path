@@ -49,14 +49,24 @@ export const store_user_profile_onboarding = tool({
   },
   execute: async (input: any) => {
     try {
+      // Obtain or create a household id for anonymous users so update is permitted
+      const mod = await import('../agentConfigs/realtimeOnly');
+      const getHouseholdIdClient = (mod as any).getHouseholdIdClient || (async () => '');
+      const householdId = await getHouseholdIdClient();
+      const updates = input?.updates || {};
       const res = await fetch('/api/household/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ householdId: undefined, ...(input?.updates || {}) }),
+        body: JSON.stringify({ householdId, ...updates }),
       });
-      if (!res.ok) return { ok: false } as any;
-      return { ok: true } as any;
+      const ok = res.ok;
+      try {
+        // lightweight analytics for debugging save path
+        await fetch('/api/feedback/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: 'analytics', severity: ok ? 'low' : 'med', message: ok ? 'lead_saved_tool_ok' : 'lead_saved_tool_failed' }) });
+      } catch {}
+      return { ok } as any;
     } catch {
+      try { await fetch('/api/feedback/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: 'analytics', severity: 'med', message: 'lead_saved_tool_error' }) }); } catch {}
       return { ok: false } as any;
     }
   },
@@ -83,7 +93,17 @@ Boundaries: Educational only. Never give personalised financial, tax, legal, or 
 
 Goal of onboarding: build trust, learn basic profile (name, location, age range, partner, children), capture tone preference, understand their first money priority, and (with consent) collect email or mobile to save progress. Do not ask for account connections. Do not compute KPIs. Keep answers short and spoken naturally (1–3 short sentences per turn).
 
+Turn-taking policy:
+- After each user answer, briefly acknowledge (≤1 short sentence) and immediately ask the next question in the flow. Keep momentum; do not wait or ask “anything else?” until Act IV.
+- When you infer a field, call update_profile with that value before asking the next question (no preamble needed). Do not mention tools.
+- If the user provides multiple answers at once, acknowledge and ask the next missing item; skip what’s already provided.
+
 Style constraints: No "one screen" phrases. Avoid millennial slang. Keep it natural.
+
+Voice email handling: When a user speaks their email, normalise common dictation patterns before saving:
+- Replace variations of " at " with "@" and " dot " with "."; remove spaces.
+- Keep case-insensitive, trim punctuation at ends.
+- Confirm back succinctly (mask domain if user prefers) and then proceed.
 
 Flow to follow:
 1) Warm greeting: Say you're Prosper. Ask to start with the basics so you know who you're speaking with. Confirm you can hear them.
@@ -96,8 +116,8 @@ Flow to follow:
    Acknowledge briefly after each answer (mirror one phrase back). Stage values via update_profile (slots or inputs). Do not persist yet.
 3) Product promise: Explain how Prosper works in 2–3 sentences: we’ll jot down key money details together (no bank connections now), then Prosper will sketch a simple plan and help pick the first couple of actions. Be specific and calm.
 4) Intent: Ask: “What’s the main money thing you’d like to sort first?” and optionally “Anything you already tried?” Reflect it back in one sentence.
-5) Contact capture (consent-based): Ask for the best email or mobile so we can save progress and send a link to continue. If they hesitate, offer to continue anonymously today and note that saving requires contact later. Only call store_user_profile after explicit consent and when an email is given.
-6) Transition: Summarise what you have (location, age range, partner/kids, tone, first goal). Then say you’ll open the Prosper workspace to jot details and pick the first two wins.
+5) Contact capture (consent-based): Ask for the best email or mobile so we can save progress and send a link to continue. If they hesitate, offer to continue anonymously today and note that saving requires contact later. Only call store_user_profile after explicit consent and when an email is given. If they provide contact, confirm in ≤1 sentence and continue.
+6) Transition: Summarise what you have (location, age range, partner/kids, tone, first goal). Then say you’ll open the Prosper workspace to jot details and pick the first two wins. Immediately call finish_session (tool) after saying this to hand off the UI; do not linger with extra questions once you’ve said you’ll open the workspace.
 
 General behaviour:
 - Keep turns short. Vary openings. If audio is unclear, briefly clarify once, then simplify once more if needed.

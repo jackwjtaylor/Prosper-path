@@ -1,6 +1,7 @@
-import React from 'react';
-import BackgroundVideo from '@/app/components/BackgroundVideo';
+import React, { Suspense } from 'react';
 import SimpleWorkspace from '@/app/components/SimpleWorkspace';
+import { TranscriptProvider } from '@/app/contexts/TranscriptContext';
+import { EventProvider } from '@/app/contexts/EventContext';
 
 export const metadata = {
   title: 'Prosper – Workspace',
@@ -9,13 +10,14 @@ export const metadata = {
 
 export default function Page() {
   return (
-    <main className="relative min-h-[100svh] w-screen overflow-hidden bg-bg text-fg">
-      <div className="absolute inset-0 z-0 overflow-hidden">
-        <BackgroundVideo src="/landing.mp4" poster="/og.png" />
-      </div>
-      <div className="absolute inset-0 bg-black/40 z-0" />
-      <SimpleWorkspace />
-    </main>
+    <Suspense fallback={<div>Loading…</div>}>
+      <main className="relative min-h-[100svh] w-screen overflow-hidden bg-bg text-fg">
+        <TranscriptProvider>
+          <EventProvider>
+            <SimpleWorkspace />
+          </EventProvider>
+        </TranscriptProvider>
+      </main>
+    </Suspense>
   );
 }
-
