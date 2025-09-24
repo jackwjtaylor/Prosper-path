@@ -37,8 +37,8 @@ type HealthMetric = {
 };
 
 const TAB_INTRO: Record<TabKey, string> = {
-  plan: 'Here’s your Prosper path. Start with the actions that unlock your next level.',
-  health: 'Spot the wins and focus areas in your money health.',
+  plan: 'Here’s your Prosper Path. Start with actions that unlock your next level.',
+  health: 'See whats going well & where you could improve your money health.',
   data: 'Check and update the details Prosper uses to tailor your plan.',
 };
 
@@ -60,7 +60,7 @@ function Chip({ children }: { children: React.ReactNode }) {
 
 function WorkspaceTabs({ active, onChange }: { active: TabKey; onChange: (tab: TabKey) => void }) {
   const tabs: Array<{ key: TabKey; label: string; caption: string }> = [
-    { key: 'plan', label: 'PLAN', caption: '' },
+    { key: 'plan', label: 'Plan', caption: '' },
     { key: 'health', label: 'Health', caption: '' },
     { key: 'data', label: 'Data', caption: '' },
   ];
@@ -106,7 +106,7 @@ function VoicePanel() {
     ? 'Connecting to Prosper…'
     : connected
       ? (isMicMuted ? 'Voice connected — mic muted' : 'Voice connected and listening')
-      : 'Voice coach ready when you are';
+      : 'Talk to Prosper about your plan';
 
   return (
     <div className="mt-5">
@@ -940,7 +940,7 @@ export default function SimpleWorkspace() {
                                   {selected.includes(tile.id) ? '✓' : '+'}
                                 </button>
                               ) : (
-                                <span className="text-[10px] px-2 py-1 rounded-full border border-white/20">Coming soon</span>
+                                <span className="text-[10px] px-2 py-1 rounded-full border border-white/20">Locked</span>
                               )}
                             </div>
                           </div>
