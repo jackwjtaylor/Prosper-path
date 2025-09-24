@@ -2,6 +2,8 @@
 
 import React from "react";
 import { SessionStatus } from "@/app/types";
+import { ensureHouseholdId } from "@/app/lib/householdLocal";
+import { useOnboardingStore } from "@/app/state/onboarding";
 
 export type VoiceOnboardingPhase =
   | "idle"
@@ -114,6 +116,18 @@ function TypewriterText({ text, className }: { text: string; className?: string 
 export default function VoiceOnboardingOverlay({ visible, phase, status, error, onSkip, segments, greetingName, onToggleVoice, voiceEnabled }: Props) {
   const copy = phaseCopy[phase];
   const heading = greetingName ? `Hey ${greetingName}` : "Hey there...";
+  const persona = useOnboardingStore((s) => s.persona);
+  const chips: string[] = React.useMemo(() => {
+    const c: string[] = [];
+    if (persona?.city && persona?.country) c.push(`${persona.city}, ${persona.country}`);
+    else if (persona?.country) c.push(persona.country);
+    if (persona?.ageDecade && persona.ageDecade !== 'unspecified') c.push(persona.ageDecade);
+    if (typeof persona?.partner === 'boolean') c.push(persona.partner ? 'Partnered' : 'Solo');
+    if (typeof persona?.childrenCount === 'number') c.push(persona.childrenCount === 1 ? '1 child' : `${persona.childrenCount} children`);
+    if (persona?.tone && persona.tone !== 'unspecified') c.push(persona.tone === 'straight' ? 'Straight‑talk' : 'Laid back');
+    if (persona?.primaryGoal) c.push(`Priority: ${persona.primaryGoal}`);
+    return c;
+  }, [persona?.city, persona?.country, persona?.ageDecade, persona?.partner, persona?.childrenCount, persona?.tone, persona?.primaryGoal]);
   const lastAssistantIndex = React.useMemo(() => {
     if (!segments?.length) return -1;
     for (let i = segments.length - 1; i >= 0; i -= 1) {
@@ -154,15 +168,16 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
       <div className="absolute inset-0 bg-[#041613]/70" />
       <div className="relative z-10 flex min-h-full flex-col items-center justify-center gap-6 md:gap-8 px-6 text-center text-[#EFEEEB]">
         <img src="/prosper_wordmark_offwhite.svg" alt="Prosper" className="h-12 w-auto md:h-14" />
-        {/* Steps indicator (Acts I–IV) */}
-        <div className="flex items-center gap-2 text-[11px] md:text-xs text-[#EFEEEB]/70">
-          {['Warm welcome','Basics','How it works','Ready?'].map((label, i) => (
-            <div key={label} className="inline-flex items-center gap-2">
-              <span className="px-2 py-1 rounded-full border border-[#EFEEEB]/30 bg-[#041613]/30">{label}</span>
-              {i < 3 && <span className="opacity-30">•</span>}
-            </div>
-          ))}
-        </div>
+        {/* Persona summary: subtle, updates live as we capture fields */}
+        {chips.length > 0 && (
+          <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] md:text-xs text-[#EFEEEB]/80">
+            {chips.map((t, i) => (
+              <span key={`${t}-${i}`} className="px-2 py-1 rounded-full border border-[#EFEEEB]/25 bg-[#041613]/30">
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="flex flex-col items-center gap-4 max-w-xl">
           <h2 className="text-3xl md:text-4xl font-semibold tracking-tight transition-all duration-500">
             {heading}
@@ -298,7 +313,10 @@ function ContactCapture({ visible }: { visible: boolean }) {
     try {
       // Best effort: store email to household if provided
       if (email && /.+@.+\..+/.test(email)) {
-        try { await fetch('/api/household/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) }); } catch {}
+        try {
+          const hh = await ensureHouseholdId();
+          await fetch('/api/household/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ householdId: hh, email }) });
+        } catch {}
       }
       // Log a lead payload (email and/or phone)
       try { await fetch('/api/leads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email || undefined, phone: phone || undefined }) }); } catch {}

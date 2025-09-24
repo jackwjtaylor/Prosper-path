@@ -59,6 +59,37 @@ export default function SimpleWorkspace() {
   const selectedVoice = useAppStore(s => s.voice);
   const [householdId, setHouseholdId] = React.useState<string>('');
   React.useEffect(() => { ensureHouseholdId().then(setHouseholdId); }, []);
+  // Hydrate persona from latest snapshot on mount as a safety net
+  const updatePersona = useOnboardingStore(s => s.updatePersona);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        if (!householdId) return;
+        const res = await fetch(`/api/prosper/dashboard?householdId=${encodeURIComponent(householdId)}`, { cache: 'no-store' });
+        const j = await res.json();
+        const inputs = (j?.latestSnapshot?.inputs || {}) as Record<string, any>;
+        const p: any = {};
+        const fullName = inputs.full_name || inputs.name || inputs.first_name || inputs.given_name;
+        if (typeof fullName === 'string' && fullName.trim()) p.name = fullName.trim().split(/[\s,]+/)[0];
+        if (typeof inputs.city === 'string') p.city = inputs.city;
+        if (typeof inputs.country === 'string') p.country = inputs.country;
+        const by = (inputs as any)?.slots?.birth_year?.value || inputs.birth_year;
+        if (by && Number.isFinite(Number(by))) {
+          const yr = Number(by); const now = new Date().getUTCFullYear(); const age = Math.max(0, now - yr); const decade = Math.floor(age / 10) * 10;
+          if (decade >= 10) p.ageDecade = (decade.toString() + 's') as any;
+        }
+        const partnerVal = (typeof inputs.partner === 'boolean') ? inputs.partner : (inputs as any)?.slots?.partner?.value;
+        if (typeof partnerVal === 'boolean') p.partner = partnerVal;
+        const kids = inputs.childrenCount ?? inputs.children ?? (inputs as any)?.slots?.dependants_count?.value;
+        if (kids != null && Number.isFinite(Number(kids))) p.childrenCount = Number(kids);
+        const tone = (inputs.tone || inputs.tone_preference || '').toString().toLowerCase();
+        if (tone.includes('straight')) p.tone = 'straight';
+        else if (tone.includes('relax') || tone.includes('laid')) p.tone = 'relaxed';
+        if (typeof inputs.primaryGoal === 'string' && inputs.primaryGoal.trim()) p.primaryGoal = inputs.primaryGoal.trim();
+        if (Object.keys(p).length) updatePersona(p);
+      } catch {}
+    })();
+  }, [householdId, updatePersona]);
   // Reveal animation on first mount (fade + gentle lift)
   const [animateIn, setAnimateIn] = React.useState(false);
   React.useEffect(() => {
@@ -135,7 +166,8 @@ export default function SimpleWorkspace() {
       }
       try {
         coachInterrupt();
-        coachSendText('Alright — let’s jot your quick Money Snapshot together. First, what’s your monthly take‑home pay?');
+        const orientation = `Please welcome me to the Simple workspace with one short sentence, then give a 2–3 sentence orientation (what's on this page, that we'll fill a few fields and pick two actions), and ask for consent to save my details to update my dashboard. Keep it warm, British English, and very concise.`;
+        coachSendText(orientation);
         coachSendEvent({ type: 'response.create' });
       } catch {}
     })();
@@ -478,21 +510,23 @@ export default function SimpleWorkspace() {
     const handler = (e: any) => {
       try {
         const slots = (e?.detail?.slots || {}) as Record<string, any>;
-        const val = (k: string) => {
-          const v = slots?.[k]?.value;
-          const n = Number(v);
-          return Number.isFinite(n) ? String(n) : '';
+        const inputs = (e?.detail?.inputs || {}) as Record<string, any>;
+        const pickNum = (...cands: any[]) => {
+          for (const c of cands) { const n = Number(c); if (Number.isFinite(n)) return String(n); }
+          return '';
         };
-        if (!netIncomeSelf) setNetIncomeSelf(val('net_income_monthly_self'));
-        if (hasPartner && !netIncomePartner) setNetIncomePartner(val('net_income_monthly_partner'));
-        if (!essentialExp) setEssentialExp(val('essential_expenses_monthly'));
-        const hs = slots?.housing_status?.value as any;
+        const hs = (slots?.housing_status?.value || inputs.housing || inputs.housing_status) as any;
         if ((hs === 'rent' || hs === 'own' || hs === 'other') && housing !== hs) setHousing(hs);
-        if (!rent && housing === 'rent') setRent(val('rent_monthly'));
-        if (!mortgagePmt && housing === 'own') setMortgagePmt(val('mortgage_payment_monthly'));
-        if (!cash) setCash(val('cash_liquid_total'));
-        if (!debtPmts) setDebtPmts(val('other_debt_payments_monthly_total'));
-        if (!debtTotal) setDebtTotal(val('other_debt_balances_total'));
+        const partnerVal = (typeof inputs.partner === 'boolean') ? inputs.partner : (slots?.partner?.value as any);
+        if (typeof partnerVal === 'boolean') setHasPartner(partnerVal);
+        if (!netIncomeSelf) setNetIncomeSelf(pickNum(slots?.net_income_monthly_self?.value, inputs.income_net_monthly, inputs.net_income_monthly_self));
+        if (!netIncomePartner && (hasPartner || partnerVal === true)) setNetIncomePartner(pickNum(slots?.net_income_monthly_partner?.value, inputs.income_net_monthly_partner, inputs.net_income_monthly_partner));
+        if (!essentialExp) setEssentialExp(pickNum(slots?.essential_expenses_monthly?.value, inputs.essential_expenses_monthly, inputs.essentials_monthly));
+        if (!rent && (hs === 'rent' || housing === 'rent')) setRent(pickNum(slots?.rent_monthly?.value, inputs.rent_monthly));
+        if (!mortgagePmt && (hs === 'own' || housing === 'own')) setMortgagePmt(pickNum(slots?.mortgage_payment_monthly?.value, inputs.mortgage_payment_monthly));
+        if (!cash) setCash(pickNum(slots?.cash_liquid_total?.value, inputs.cash_liquid_total, inputs.emergency_savings_liquid));
+        if (!debtPmts) setDebtPmts(pickNum(slots?.other_debt_payments_monthly_total?.value, inputs.debt_required_payments_monthly));
+        if (!debtTotal) setDebtTotal(pickNum(slots?.other_debt_balances_total?.value, inputs.debt_balances_total));
       } catch {}
     };
     window.addEventListener('pp:onboarding_profile', handler as any);

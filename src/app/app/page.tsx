@@ -5,7 +5,7 @@ import App from "@/app/App";
 
 export default function Page() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={null}>
       <TranscriptProvider>
         <EventProvider>
           <App />

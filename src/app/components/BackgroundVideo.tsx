@@ -2,12 +2,13 @@
 import React from "react";
 
 type Props = {
-  src: string;
+  src?: string; // mp4 fallback
+  webmSrc?: string; // optional webm for faster start
   poster?: string;
   className?: string;
 };
 
-export default function BackgroundVideo({ src, poster, className = "absolute inset-0 h-full w-full object-cover" }: Props) {
+export default function BackgroundVideo({ src, webmSrc, poster, className = "absolute inset-0 h-full w-full object-cover" }: Props) {
   const ref = React.useRef<HTMLVideoElement>(null);
 
   React.useEffect(() => {
@@ -44,8 +45,8 @@ export default function BackgroundVideo({ src, poster, className = "absolute ins
       aria-hidden
       tabIndex={-1}
     >
-      <source src={src} type="video/mp4" />
+      {webmSrc ? <source src={webmSrc} type="video/webm" /> : null}
+      {src ? <source src={src} type="video/mp4" /> : null}
     </video>
   );
 }
-

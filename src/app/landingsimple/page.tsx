@@ -37,13 +37,13 @@ export default function Page() {
     <main className="relative h-[100svh] w-screen overflow-hidden bg-bg text-fg">
       <header className="absolute top-6 left-6 z-20">
         <Link href="/waitlist" className="inline-flex items-center gap-3">
-          <img src="/prosper_wordmark.svg" alt="Prosper wordmark" className="h-10 md:h-12 w-auto opacity-95" />
+          <img src="/prosper_wordmark_offwhite.svg" alt="Prosper wordmark" className="h-10 md:h-12 w-auto opacity-95" />
           <span className="sr-only">Prosper</span>
         </Link>
       </header>
 
       <div className="absolute inset-0 z-0 overflow-hidden">
-        <BackgroundVideo src="/landing.mp4" poster="/og.png" />
+        <BackgroundVideo webmSrc="/landing.webm" src="/landing.mp4" poster="/og.png" />
       </div>
 
       <div className="absolute inset-0 bg-black/40 z-10" />
@@ -68,7 +68,8 @@ export default function Page() {
             <div className="flex w-full max-w-[360px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
               <Link
                 href={startHref}
-                className="inline-flex items-center justify-center whitespace-nowrap rounded-full border border-dim bg-[#EFEEEB] px-7 py-3 text-sm font-medium text-[#083630] hover:opacity-90"
+                prefetch
+                className="inline-flex cursor-pointer pointer-events-auto items-center justify-center whitespace-nowrap rounded-full border border-dim bg-[#EFEEEB] px-7 py-3 text-sm font-medium text-[#083630] hover:opacity-90"
               >
                 Start
               </Link>

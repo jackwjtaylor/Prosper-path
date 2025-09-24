@@ -69,6 +69,7 @@ function App() {
   const [isUserDataOpen, setIsUserDataOpen] = useState<boolean>(false);
   const [missingRequiredCount, setMissingRequiredCount] = useState<number>(0);
   const [householdInfo, setHouseholdInfo] = useState<{ email?: string; full_name?: string } | null>(null);
+  const [returningCheckReady, setReturningCheckReady] = useState<boolean>(false);
   const voiceOnboardingFlag = (process.env.NEXT_PUBLIC_VOICE_ONBOARDING || "").toLowerCase();
   const voiceOnboardingV2Flag = (process.env.NEXT_PUBLIC_VOICE_ONBOARDING_V2 || "").toLowerCase();
   const isVoiceOnboardingEnabled =
@@ -82,17 +83,23 @@ function App() {
   const voiceIntroTriggeredRef = useRef(false);
   const voiceIntroGreetingSentRef = useRef(false);
   const voiceIntroEngagedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Prefetch Simple workspace to avoid flicker when handing off
+  useEffect(() => { try { if (showVoiceIntro) router.prefetch('/simple'); } catch {} }, [showVoiceIntro]);
   const [voiceIntroSegments, setVoiceIntroSegments] = useState<Array<{ speaker: 'assistant' | 'user'; text: string }>>([]);
   const [voiceIntroName, setVoiceIntroName] = useState<string>("");
   const lastUserTurnRef = useRef<number>(0);
   const nudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handoffPendingRef = useRef<boolean>(false);
+  const handoffTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const updatePersona = useOnboardingStore(s => s.updatePersona);
   const updateDraft = useOnboardingStore(s => s.updateDraft);
   useEffect(() => { ensureHouseholdId().then(setHouseholdId); }, []);
   useEffect(() => {
     if (!isVoiceOnboardingEnabled) return;
     if (!isLandingSimpleSource) return;
+    if (!returningCheckReady) return;
+    // Skip showing voice intro entirely for returning users
+    if (isReturningUser) return;
     if (voiceIntroTriggeredRef.current) return;
     voiceIntroTriggeredRef.current = true;
     voiceIntroGreetingSentRef.current = false;
@@ -101,7 +108,7 @@ function App() {
     setVoiceIntroName("");
     setShowVoiceIntro(true);
     // overlay remains until user chooses to switch modes
-  }, [isVoiceOnboardingEnabled, isLandingSimpleSource]);
+  }, [isVoiceOnboardingEnabled, isLandingSimpleSource, isReturningUser, returningCheckReady]);
 
   useEffect(() => {
     if (showVoiceIntro) {
@@ -118,8 +125,13 @@ function App() {
         const persona: any = {};
         const draft: any = {};
         // Name
-        const fullName = inputs.full_name || slots.full_name?.value || inputs.name;
-        if (typeof fullName === 'string' && fullName.trim()) persona.name = fullName.trim().split(' ')[0];
+        const fullName = inputs.full_name || slots.full_name?.value || inputs.name || inputs.first_name || inputs.given_name || slots.first_name?.value;
+        if (typeof fullName === 'string' && fullName.trim()) {
+          const first = fullName.trim().split(/[\s,]+/)[0];
+          if (first) {
+            persona.name = first;
+          }
+        }
         // City/Country
         if (typeof inputs.city === 'string') persona.city = inputs.city;
         if (typeof inputs.country === 'string') persona.country = inputs.country;
@@ -163,6 +175,10 @@ function App() {
         if (slots.other_debt_payments_monthly_total?.value != null) draft.debtPmts = toNum(slots.other_debt_payments_monthly_total.value);
         if (slots.other_debt_balances_total?.value != null) draft.debtTotal = toNum(slots.other_debt_balances_total.value);
         draft.rawSlots = slots as any;
+        // Update overlay greeting name from profile events if available
+        if (!voiceIntroName && persona.name && typeof persona.name === 'string') {
+          try { setVoiceIntroName(persona.name); } catch {}
+        }
         updatePersona(persona);
         if (Object.keys(draft).length) updateDraft(draft);
       } catch {}
@@ -172,6 +188,20 @@ function App() {
         // Mark handoff pending; route after the assistant finishes this utterance
         handoffPendingRef.current = true;
         try { sessionStorage.setItem('pp_simple_coach', '1'); } catch {}
+        // Fallback: if no further assistant utterance, route to /simple after a short delay
+        if (handoffTimerRef.current) { clearTimeout(handoffTimerRef.current); handoffTimerRef.current = null; }
+        handoffTimerRef.current = setTimeout(() => {
+          try {
+            const url = new URL(window.location.href);
+            const agentConfig = (url.searchParams.get('agentConfig') || '').toLowerCase();
+            const source = (url.searchParams.get('source') || '').toLowerCase();
+            const v2 = agentConfig === 'onboardingv2' && source === 'landing-simple';
+            if (handoffPendingRef.current && v2) {
+              handoffPendingRef.current = false;
+              router.push('/simple');
+            }
+          } catch {}
+        }, 3500);
       } catch {}
     };
     window.addEventListener('pp:onboarding_profile', onProfile as any);
@@ -181,6 +211,22 @@ function App() {
       window.removeEventListener('pp:onboarding_finish', onFinish as any);
     };
   }, [router, updatePersona]);
+
+  // If onboarding is enabled but we detect a returning user, skip overlay and go straight to workspace
+  useEffect(() => {
+    try {
+      if (!isLandingSimpleSource) return;
+      if (!isVoiceOnboardingEnabled) return;
+      if (!householdId) return;
+      if (isReturningUser) {
+        setShowVoiceIntro(false);
+        setVoiceIntroPhase('idle');
+        setVoiceIntroSegments([]);
+        setVoiceIntroName('');
+        router.push('/simple');
+      }
+    } catch {}
+  }, [isReturningUser, isLandingSimpleSource, isVoiceOnboardingEnabled, householdId]);
   // Track auth status and auto-link household when signed in
   useEffect(() => {
     const supa = getSupabaseClient();
@@ -242,6 +288,9 @@ function App() {
         setUsage(json?.usage || null);
         setHouseholdInfo(json?.household || null);
       } catch {}
+      finally {
+        setReturningCheckReady(true);
+      }
     })();
   }, [householdId]);
 
@@ -311,6 +360,7 @@ function App() {
         // If onboarding requested a handoff, route after this turn completes
         if (handoffPendingRef.current) {
           handoffPendingRef.current = false;
+          if (handoffTimerRef.current) { clearTimeout(handoffTimerRef.current); handoffTimerRef.current = null; }
           setTimeout(() => {
             try {
               const url = new URL(window.location.href);
@@ -343,10 +393,13 @@ function App() {
         }
       }
       if (!voiceIntroName) {
-        const match = text.match(/\b(?:i'm|i am|my name is)\s+([A-Z][a-zA-Z-' ]+)/i);
-        const candidate = match?.[1];
-        if (candidate && candidate.toLowerCase() !== 'prosper') {
-          setVoiceIntroName(candidate.trim());
+        // Extract first name from common patterns; avoid ages or numeric matches
+        const nameMatch = text.match(/\b(?:i'm|i am|my name is)\s+([A-Za-z][A-Za-z-' ]+)/i);
+        const candidateRaw = nameMatch?.[1]?.trim() || '';
+        const candidate = candidateRaw.split(/[\s,]+/)[0];
+        const looksNumeric = /\d/.test(candidate);
+        if (candidate && !looksNumeric && candidate.toLowerCase() !== 'prosper') {
+          setVoiceIntroName(candidate);
         }
       }
     },
@@ -542,6 +595,8 @@ function App() {
         setIsMicMuted(false);
         setVoiceIntroSegments([]);
         setVoiceIntroName("");
+        // Auto-connect to realtime once mic permission granted
+        try { connectToRealtime(); } catch {}
       } catch (err) {
         if (cancelled) return;
         console.error("Microphone permission denied", err);
@@ -627,7 +682,7 @@ function App() {
   };
 
   const handleSkipVoiceIntro = () => {
-    setShowVoiceIntro(false);
+    // Keep overlay visible to avoid flicker; it will unmount on route
     setVoiceIntroPhase('idle');
     setVoiceIntroError(null);
     voiceIntroGreetingSentRef.current = true;

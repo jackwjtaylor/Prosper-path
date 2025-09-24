@@ -8,7 +8,7 @@ import type { Slots } from "@/app/lib/schema/slots";
 import { SessionState, computeFingerprint } from "@/app/agentConfigs/sessionState";
 
 // -------------------- lightweight client helpers --------------------
-async function getHouseholdIdClient(): Promise<string> {
+export async function getHouseholdIdClient(): Promise<string> {
   try {
     const res = await fetch("/api/household/init", { cache: "no-store" });
     const data = await res.json();
