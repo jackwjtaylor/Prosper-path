@@ -18,12 +18,7 @@ function Footer() {
           <Link href="/terms" className="hover:text-fg">Terms</Link>
           <Link href="/contact" className="hover:text-fg">Contact</Link>
         </div>
-        <div className="flex items-center gap-3">
-          <a href="https://x.com/" className="hover:text-fg">X</a>
-          <a href="https://instagram.com/" className="hover:text-fg" aria-label="Instagram">
-            <span className="inline-flex h-4 w-4 items-center justify-center rounded-sm border border-current text-xs">IG</span>
-          </a>
-        </div>
+        <p className="text-xs text-dim/80 sm:text-sm">© {new Date().getFullYear()} Prosper</p>
       </div>
     </footer>
   )
@@ -62,17 +57,29 @@ export default function Page() {
         <div className="w-full max-w-[1120px] px-6">
           <div className="flex flex-col items-center text-center gap-6 md:gap-8">
             <h1 className="text-4xl font-semibold tracking-tight md:text-6xl md:leading-tight">
-              Your personal money coach
+              Build wealth with a personal money coach
             </h1>
             <p className="text-dim text-lg md:text-xl md:text-balance max-w-[680px]">
-              A step-by-step plan to grow your wealth
+              Prosper audits your finances, designs a step-by-step plan, and keeps you accountable with weekly check-ins.
             </p>
+            <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-dim md:text-base">
+              <span className="rounded-full border border-white/20 bg-black/30 px-4 py-2 backdrop-blur">
+                Personalised plan in under 7 days
+              </span>
+              <span className="rounded-full border border-white/20 bg-black/30 px-4 py-2 backdrop-blur">
+                Action items reviewed every week
+              </span>
+              <span className="rounded-full border border-white/20 bg-black/30 px-4 py-2 backdrop-blur">
+                Founding-member pricing locked in
+              </span>
+            </div>
             <div className="flex w-full max-w-[520px] flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
               <WaitlistForm includeName={false} buttonLabel="Join Waitlist" placeholder="Enter your email" />
             </div>
-            <p className="text-xs text-dim md:text-sm">
-              Join the waitlist for early access
-            </p>
+            <div className="flex flex-col gap-2 text-xs text-dim md:text-sm">
+              <p>First 150 sign-ups receive early access invites and our launch playbook.</p>
+              <p className="text-dim/80">We’ll only email you about Prosper updates. Unsubscribe anytime.</p>
+            </div>
           </div>
         </div>
       </section>
