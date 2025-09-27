@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import WaitlistForm from "@/app/components/WaitlistForm";
 import BackgroundVideo from "@/app/components/BackgroundVideo";
+import ScarcityCounter from "@/app/components/ScarcityCounter";
 
 export const metadata = {
   title: 'Prosper - Your Personal Money Coach',
@@ -18,12 +19,7 @@ function Footer() {
           <Link href="/terms" className="hover:text-fg">Terms</Link>
           <Link href="/contact" className="hover:text-fg">Contact</Link>
         </div>
-        <div className="flex items-center gap-3">
-          <a href="https://x.com/" className="hover:text-fg">X</a>
-          <a href="https://instagram.com/" className="hover:text-fg" aria-label="Instagram">
-            <span className="inline-flex h-4 w-4 items-center justify-center rounded-sm border border-current text-xs">IG</span>
-          </a>
-        </div>
+        <p className="text-xs text-dim/80 sm:text-sm">© {new Date().getFullYear()} Prosper</p>
       </div>
     </footer>
   )
@@ -65,13 +61,14 @@ export default function Page() {
               Your personal money coach
             </h1>
             <p className="text-dim text-lg md:text-xl md:text-balance max-w-[680px]">
-              A step-by-step plan to grow your wealth
+              Get a step-by-step plan to build long term wealth
             </p>
             <div className="flex w-full max-w-[520px] flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
               <WaitlistForm includeName={false} buttonLabel="Join Waitlist" placeholder="Enter your email" />
             </div>
             <p className="text-xs text-dim md:text-sm">
-              Join the waitlist for early access
+              <ScarcityCounter />
+              <span> — early access and a small launch gift 🎁</span>
             </p>
           </div>
         </div>
