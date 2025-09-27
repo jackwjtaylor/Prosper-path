@@ -31,7 +31,7 @@ export default function Page() {
       {/* Logo top-left */}
       <header className="absolute top-6 left-6 z-20">
         <Link href="/waitlist" className="inline-flex items-center gap-3">
-          <img src="/prosper_wordmark.svg" alt="Prosper wordmark" className="h-10 md:h-12 w-auto opacity-95" />
+          <img src="/prosper_wordmark_offwhite.svg" alt="Prosper wordmark" className="h-10 md:h-12 w-auto opacity-95" />
           <span className="sr-only">Prosper</span>
         </Link>
       </header>
@@ -57,6 +57,7 @@ export default function Page() {
       <section className="relative z-20 flex h-full items-center justify-center">
         <div className="w-full max-w-[1120px] px-6">
           <div className="flex flex-col items-center text-center gap-6 md:gap-8">
+            <img src="/2D76K394.eps.svg" alt="" aria-hidden className="h-8 w-8 md:h-9 md:w-9 opacity-95" />
             <h1 className="text-4xl font-semibold tracking-tight md:text-6xl md:leading-tight">
               Your personal money coach
             </h1>
@@ -68,7 +69,7 @@ export default function Page() {
             </div>
             <p className="text-xs text-dim md:text-sm">
               <ScarcityCounter />
-              <span> — early access and a small launch gift 🎁</span>
+              <span> — join for early access 🎁</span>
             </p>
           </div>
         </div>

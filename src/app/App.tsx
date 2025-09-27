@@ -72,6 +72,8 @@ function App() {
   const [returningCheckReady, setReturningCheckReady] = useState<boolean>(false);
   const voiceOnboardingFlag = (process.env.NEXT_PUBLIC_VOICE_ONBOARDING || "").toLowerCase();
   const voiceOnboardingV2Flag = (process.env.NEXT_PUBLIC_VOICE_ONBOARDING_V2 || "").toLowerCase();
+  const simpleOnlyFlag = (process.env.NEXT_PUBLIC_SIMPLE_ONLY || "true").toLowerCase();
+  const isSimpleOnly = simpleOnlyFlag === '1' || simpleOnlyFlag === 'true' || simpleOnlyFlag === 'yes';
   const isVoiceOnboardingEnabled =
     voiceOnboardingFlag === "1" || voiceOnboardingFlag === "true" || voiceOnboardingFlag === "yes" ||
     voiceOnboardingV2Flag === "1" || voiceOnboardingV2Flag === "true" || voiceOnboardingV2Flag === "yes";
@@ -94,6 +96,14 @@ function App() {
   const updatePersona = useOnboardingStore(s => s.updatePersona);
   const updateDraft = useOnboardingStore(s => s.updateDraft);
   useEffect(() => { ensureHouseholdId().then(setHouseholdId); }, []);
+  // If Simple-only mode is enabled, send users directly to /simple unless running the onboarding overlay
+  useEffect(() => {
+    try {
+      if (isSimpleOnly && !(isVoiceOnboardingEnabled && isLandingSimpleSource)) {
+        router.replace('/simple');
+      }
+    } catch {}
+  }, [isSimpleOnly, isVoiceOnboardingEnabled, isLandingSimpleSource, router]);
   useEffect(() => {
     if (!isVoiceOnboardingEnabled) return;
     if (!isLandingSimpleSource) return;
@@ -970,41 +980,46 @@ function App() {
         </div>
       </div>
 
-      {/* BODY: centered 2-col grid so the left pane sizes cleanly */}
+      {/* BODY: hide legacy dashboard when Simple-only mode or overlay is active */}
       <div className="flex-1 w-full min-h-0">
         <div className="max-w-7xl mx-auto px-2 h-full min-h-0 pb-16 lg:pb-0">
-          <div className={`hidden lg:grid grid-cols-1 ${showChatColumn ? 'lg:grid-cols-[520px_1fr]' : 'lg:grid-cols-1'} gap-4 h-full min-h-0`}>
-            {/* Left column: Integrated Chat Panel (animates out) */}
-            {showChatColumn && (
-              <div className={`transition-all duration-300 ease-out ${isTranscriptVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-full pointer-events-none'}`}>
-                {shouldRenderChat && (
+          {(!isSimpleOnly && !showVoiceIntro) ? (
+            <>
+              <div className={`hidden lg:grid grid-cols-1 ${showChatColumn ? 'lg:grid-cols-[520px_1fr]' : 'lg:grid-cols-1'} gap-4 h-full min-h-0`}>
+                {/* Left column: Integrated Chat Panel (animates out) */}
+                {showChatColumn && (
+                  <div className={`transition-all duration-300 ease-out ${isTranscriptVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-full pointer-events-none'}`}>
+                    {shouldRenderChat && (
+                      <ChatPanel
+                        userText={userText}
+                        setUserText={setUserText}
+                        onSendMessage={handleSendTextMessage}
+                        onToggleConnection={onToggleConnection}
+                      />
+                    )}
+                  </div>
+                )}
+                {/* Right column: Dashboard expands to full width when transcript hidden */}
+                <Dashboard />
+              </div>
+
+              {/* Mobile: single view with tabs */}
+              <div className="block lg:hidden h-full min-h-0">
+                {activeTab === 'chat' ? (
                   <ChatPanel
                     userText={userText}
                     setUserText={setUserText}
                     onSendMessage={handleSendTextMessage}
                     onToggleConnection={onToggleConnection}
                   />
+                ) : (
+                  <Dashboard />
                 )}
               </div>
-            )}
-
-            {/* Right column: Dashboard expands to full width when transcript hidden */}
-            <Dashboard />
-          </div>
-
-          {/* Mobile: single view with tabs */}
-          <div className="block lg:hidden h-full min-h-0">
-            {activeTab === 'chat' ? (
-              <ChatPanel
-                userText={userText}
-                setUserText={setUserText}
-                onSendMessage={handleSendTextMessage}
-                onToggleConnection={onToggleConnection}
-              />
-            ) : (
-              <Dashboard />
-            )}
-          </div>
+            </>
+          ) : (
+            <div className="h-full min-h-[40vh]" aria-hidden />
+          )}
         </div>
 
         {/* Bottom mobile voice-first nav */}
