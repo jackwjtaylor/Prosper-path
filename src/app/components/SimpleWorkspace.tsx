@@ -26,6 +26,30 @@ type DashboardSummary = {
 };
 
 type TabKey = 'plan' | 'health' | 'data';
+type StageKey = 'foundations' | 'protect' | 'grow';
+
+type ActionStatus = 'todo' | 'in-progress' | 'done';
+type StageUnlocks = Record<StageKey, boolean>;
+type StageStats = Record<StageKey, { total: number; done: number; inProgress: number; available: number; locked: number }>;
+type PlanTile = { id: string; title: string; blurb: string; stage: StageKey; gated?: boolean; recommended?: boolean; reason?: string };
+
+const ACTION_PROGRESS_STORAGE_KEY = 'pp_simple_action_progress_v1';
+const MAX_ACTIVE_ACTIONS = 2;
+const PROTECT_UNLOCK_THRESHOLD = 2;
+const GROW_FOUNDATION_THRESHOLD = 3;
+const GROW_PROTECT_THRESHOLD = 1;
+
+const STATUS_LABEL: Record<ActionStatus, string> = {
+  todo: 'Ready',
+  'in-progress': 'In progress',
+  done: 'Completed',
+};
+
+const STATUS_CLASSES: Record<ActionStatus, string> = {
+  todo: 'border-white/25 bg-white/10 text-white/70',
+  'in-progress': 'border-amber-300/70 bg-amber-300/15 text-amber-100',
+  done: 'border-emerald-300/70 bg-emerald-300/15 text-emerald-100',
+};
 
 type HealthMetric = {
   key: string;
@@ -43,6 +67,12 @@ const TAB_INTRO: Record<TabKey, string> = {
   health: 'See whats going well & where you could improve your money health.',
   data: 'Check and update the details Prosper uses to tailor your plan.',
 };
+
+const PLAN_STAGE_META: Array<{ key: StageKey; label: string; sublabel: string }> = [
+  { key: 'foundations', label: 'Build foundations', sublabel: 'Stabilise essentials, cash flow, and buffers.' },
+  { key: 'protect', label: 'Protect your progress', sublabel: 'Cover risks so setbacks don’t undo gains.' },
+  { key: 'grow', label: 'Grow & automate', sublabel: 'Put surplus to work with simple, repeatable systems.' },
+];
 
 const AGE_OPTIONS: AgeDecade[] = ['unspecified', '20s', '30s', '40s', '50s', '60s', '70s', '80s', '90s', '100s'];
 
@@ -285,6 +315,151 @@ function PersonaBanner() {
   );
 }
 
+function PlanStageActions({
+  stage,
+  tiles,
+  selected,
+  openExplain,
+  actionProgress,
+  stats,
+}: {
+  stage: StageKey;
+  tiles: PlanTile[];
+  selected: string[];
+  openExplain: (target: PlanTile | string) => void;
+  actionProgress: Record<string, ActionStatus>;
+  stats: StageStats[StageKey];
+}) {
+  const stageMeta = PLAN_STAGE_META.find((s) => s.key === stage);
+  const derived = React.useMemo(() => tiles.map((tile) => {
+    const status = actionProgress[tile.id] ?? 'todo';
+    const locked = tile.gated && status !== 'done';
+    const isSelected = selected.includes(tile.id);
+    return { ...tile, status, locked, isSelected } as PlanTile & { status: ActionStatus; locked: boolean; isSelected: boolean };
+  }), [tiles, actionProgress, selected]);
+
+  const primary = derived.find((tile) => tile.isSelected && !tile.locked) ?? derived.find((tile) => !tile.locked && tile.status !== 'done');
+  const nextUp = derived.find((tile) => !tile.locked && tile.id !== primary?.id && tile.status !== 'done');
+  const remainder = derived.filter((tile) => tile.id !== primary?.id && tile.id !== nextUp?.id);
+
+  const renderStatusPill = (status: ActionStatus, locked: boolean) => {
+    if (locked) return <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white/60">Locked</span>;
+    return (
+      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wider ${STATUS_CLASSES[status]}`}>
+        {STATUS_LABEL[status]}
+      </span>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      {primary ? (
+        <div className="rounded-2xl border border-emerald-300/60 bg-emerald-300/15 px-5 py-4 shadow transition">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="max-w-xl">
+              <div className="text-xs uppercase tracking-widest text-emerald-100/80">Current focus</div>
+              <div className="text-xl md:text-2xl font-semibold text-white mt-2">{primary.title}</div>
+              <div className="text-sm text-white/80 mt-2 whitespace-pre-line">{primary.blurb}</div>
+              {primary.reason && <div className="text-xs text-white/70 mt-2">{primary.reason}</div>}
+              <div className="flex flex-wrap items-center gap-2 mt-3">
+                {renderStatusPill(primary.status, false)}
+                {primary.recommended && <span className="inline-flex items-center gap-1 rounded-full border border-white/30 bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white/80">Recommended</span>}
+              </div>
+            </div>
+            <div className="flex flex-col items-start md:items-end gap-2 text-xs text-white/70">
+              <button
+                type="button"
+                onClick={() => openExplain(primary)}
+                className="inline-flex items-center justify-center rounded-full bg-white/20 px-4 py-1.5 text-sm font-medium text-white hover:bg-white/30"
+              >
+                {primary.status === 'in-progress' ? 'Continue with Prosper' : 'Start with Prosper'}
+              </button>
+              <div className="max-w-[220px] text-right md:text-left text-white/70 md:text-right">
+                Prosper will walk you through this step in under 2 minutes.
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-white/15 bg-white/8 p-4 text-sm text-white/70">
+          Stage complete — great progress! We’ll unlock the next stage shortly.
+        </div>
+      )}
+
+      {nextUp && (
+        <div className="rounded-xl border border-white/15 bg-white/8 p-4 md:p-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="max-w-xl">
+            <div className="text-xs uppercase tracking-widest text-white/50">Next up</div>
+            <div className="text-lg font-medium text-white mt-1">{nextUp.title}</div>
+            <div className="text-sm text-white/70 mt-2">{nextUp.blurb}</div>
+            {nextUp.reason && <div className="text-xs text-white/60 mt-2">{nextUp.reason}</div>}
+          </div>
+          <div className="flex flex-col items-start md:items-end gap-2">
+            <button
+              type="button"
+              onClick={() => openExplain(nextUp)}
+              className="inline-flex items-center justify-center rounded-full border border-white/25 px-4 py-1.5 text-sm text-white/80 hover:bg-white/10"
+            >
+              Preview with Prosper
+            </button>
+            {renderStatusPill(nextUp.status, false)}
+          </div>
+        </div>
+      )}
+
+      {remainder.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs uppercase tracking-widest text-white/50">Stage queue</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {remainder.map((tile) => {
+              const disabled = tile.locked;
+              const reason = tile.reason || (tile.locked ? 'Unlocks after the current focus is complete.' : '');
+              return (
+                <button
+                  key={tile.id}
+                  type="button"
+                  onClick={() => { if (!disabled) openExplain(tile); }}
+                  className={`text-left rounded-xl border p-4 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+                    disabled
+                      ? 'cursor-not-allowed border-white/10 bg-white/5 text-white/40'
+                      : tile.status === 'done'
+                        ? 'border-emerald-300/50 bg-emerald-300/10 text-white'
+                        : tile.isSelected
+                          ? 'border-emerald-300/60 bg-emerald-300/10 text-white'
+                          : 'border-white/15 bg-white/8 text-white/90 hover:bg-white/12'
+                  }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium text-white">{tile.title}</div>
+                        <div className="text-xs text-white/70 mt-2">{tile.blurb}</div>
+                        {reason && <div className="text-[11px] text-white/60 mt-2">{reason}</div>}
+                      </div>
+                      {renderStatusPill(tile.status, tile.locked)}
+                    </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3 text-[11px] text-white/60">
+        <span>{stageMeta?.label ?? 'Stage'} progress</span>
+        <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-white/70">
+          {stats.done} completed
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-white/70">
+          {stats.inProgress} in progress
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-white/70">
+          {Math.max(stats.total - stats.done - stats.inProgress, 0)} remaining
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function SimpleWorkspace() {
   const persona = useOnboardingStore((s) => s.persona);
   const draft = useOnboardingStore((s) => s.draft);
@@ -318,12 +493,52 @@ export default function SimpleWorkspace() {
   React.useEffect(() => { hasPartnerRef.current = hasPartner; }, [hasPartner]);
   const housingRef = React.useRef(housing);
   React.useEffect(() => { housingRef.current = housing; }, [housing]);
-  const [saving, setSaving] = React.useState<boolean>(false);
   const [autoSaving, setAutoSaving] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
   const [selected, setSelected] = React.useState<string[]>([]);
   const [unlocked, setUnlocked] = React.useState<Set<string>>(new Set());
   const [computedNetWorth, setComputedNetWorth] = React.useState<number | null>(null);
+  const [actionProgress, setActionProgress] = React.useState<Record<string, ActionStatus>>({});
+  const actionProgressRef = React.useRef<Record<string, ActionStatus>>({});
+  React.useEffect(() => { actionProgressRef.current = actionProgress; }, [actionProgress]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = window.localStorage.getItem(ACTION_PROGRESS_STORAGE_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      if (parsed && typeof parsed === 'object') {
+        setActionProgress(parsed as Record<string, ActionStatus>);
+      }
+    } catch {}
+  }, []);
+
+  const persistActionProgress = React.useCallback((next: Record<string, ActionStatus>) => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (!Object.keys(next).length) {
+        window.localStorage.removeItem(ACTION_PROGRESS_STORAGE_KEY);
+      } else {
+        window.localStorage.setItem(ACTION_PROGRESS_STORAGE_KEY, JSON.stringify(next));
+      }
+    } catch {}
+  }, []);
+
+  const setActionStatus = React.useCallback((id: string, status: ActionStatus) => {
+    setActionProgress((prev) => {
+      const current = prev[id];
+      if (current === status) return prev;
+      const next: Record<string, ActionStatus> = { ...prev };
+      if (status === 'todo') {
+        delete next[id];
+      } else {
+        next[id] = status;
+      }
+      persistActionProgress(next);
+      return next;
+    });
+  }, [persistActionProgress]);
 
   const applyServerField = React.useCallback((key: NumericFieldKey, value: string | number | null | undefined) => {
     const next = value == null ? '' : String(value);
@@ -584,6 +799,21 @@ export default function SimpleWorkspace() {
   const assetsTotal = fieldValues.assetsTotal;
   const liabilitiesTotal = fieldValues.liabilitiesTotal;
 
+  const dataWarnings = React.useMemo(() => {
+    const warnings: string[] = [];
+    const home = planeNumber(homeValue);
+    const mortgage = planeNumber(mortgageBalance) || 0;
+    if (home != null && home > 0 && mortgage > home * 1.2) {
+      warnings.push('Mortgage balance looks higher than home value. Double check those numbers.');
+    }
+    const assetsOverride = planeNumber(assetsTotal);
+    const debtsOverride = planeNumber(liabilitiesTotal);
+    if (assetsOverride != null && debtsOverride != null && assetsOverride < debtsOverride) {
+      warnings.push('Overrides show debts greater than assets — is that intentional?');
+    }
+    return warnings;
+  }, [homeValue, mortgageBalance, assetsTotal, liabilitiesTotal]);
+
   const localNetWorth = React.useMemo(() => {
     const parse = (val: string) => planeNumber(val) ?? 0;
     const overrideAssets = planeNumber(assetsTotal);
@@ -786,6 +1016,7 @@ export default function SimpleWorkspace() {
   // Lightweight inline voice explain dialog state
   const [explainOpen, setExplainOpen] = React.useState(false);
   const [explainingTitle, setExplainingTitle] = React.useState<string>('');
+  const [explainingTile, setExplainingTile] = React.useState<PlanTile | null>(null);
   const [explainLogs, setExplainLogs] = React.useState<Array<{ speaker: 'assistant'|'user'; text: string }>>([]);
   const [checklist, setChecklist] = React.useState<string[]>([]);
   const [checked, setChecked] = React.useState<Record<string, boolean>>({});
@@ -853,7 +1084,15 @@ export default function SimpleWorkspace() {
     window.addEventListener('pp:disconnect_voice', onDisc as any);
     return () => window.removeEventListener('pp:disconnect_voice', onDisc as any);
   }, [coachDisconnect]);
-  async function openExplain(title: string) {
+  async function openExplain(target: PlanTile | string) {
+    const title = typeof target === 'string' ? target : target.title;
+    const tile = typeof target === 'string' ? null : target;
+    if (tile) {
+      const currentStatus = actionProgressRef.current[tile.id] ?? 'todo';
+      if (currentStatus !== 'done') setActionStatus(tile.id, 'in-progress');
+      log('simple_focus_action', { id: tile.id, stage: tile.stage });
+    }
+    setExplainingTile(tile);
     setExplainingTitle(title);
     setExplainOpen(true);
     setExplainLogs([]);
@@ -895,6 +1134,7 @@ export default function SimpleWorkspace() {
 
   function closeExplain() {
     setExplainOpen(false);
+    setExplainingTile(null);
     try { explainDisconnect(); } catch {}
   }
 
@@ -908,9 +1148,10 @@ export default function SimpleWorkspace() {
   };
   React.useEffect(() => { log('simple_enter'); }, []);
 
-  type PlanTile = { id: string; title: string; blurb: string; gated?: boolean; recommended?: boolean; reason?: string };
-  const planTiles: PlanTile[] = React.useMemo(() => {
+  const planData = React.useMemo(() => {
     const tiles: PlanTile[] = [];
+    let protectUnlocked = false;
+    let growUnlocked = false;
     const debtTotalNum = planeNumber(debtTotal) || 0;
     const baseCash = planeNumber(cash) || 0;
     const emergencyNum = planeNumber(emergencySavings) || 0;
@@ -927,26 +1168,27 @@ export default function SimpleWorkspace() {
     const goal = (persona?.primaryGoal || '').toLowerCase();
 
     // Always-on foundations
-    tiles.push({ id: 'have-the-money-talk', title: 'Have the money talk', blurb: 'A quick chat to align how you want to handle money together. Simple prompts included.', recommended: !!hasPartner });
-    tiles.push({ id: 'declutter-finances', title: 'Get your £hit together', blurb: 'Streamline accounts, clean up cards, and find any lost money.', recommended: !hasPartner });
-    tiles.push({ id: 'foundations', title: 'Set your foundations', blurb: 'Learn the essentials so choices feel straightforward and calm.' });
+    tiles.push({ id: 'have-the-money-talk', stage: 'foundations', title: 'Have the money talk', blurb: 'A quick chat to align how you want to handle money together. Simple prompts included.', recommended: !!hasPartner });
+    tiles.push({ id: 'declutter-finances', stage: 'foundations', title: 'Get your £hit together', blurb: 'Streamline accounts, clean up cards, and find any lost money.', recommended: !hasPartner });
+    tiles.push({ id: 'foundations', stage: 'foundations', title: 'Set your foundations', blurb: 'Learn the essentials so choices feel straightforward and calm.' });
 
     // Conditional starters
     if (debtTotalNum > 0) {
-      tiles.push({ id: 'clear-debts', title: 'Clear your unhealthy debts', blurb: 'Lower stress and costs by tackling expensive debts first.', recommended: true, reason: 'You mentioned outstanding debts.' });
+      tiles.push({ id: 'clear-debts', stage: 'foundations', title: 'Clear your unhealthy debts', blurb: 'Lower stress and costs by tackling expensive debts first.', recommended: true, reason: 'You mentioned outstanding debts.' });
     }
     if (suggestEmergency) {
-      tiles.push({ id: 'emergency-fund-1', title: 'Build your first emergency fund', blurb: 'Create a soft cushion for life’s surprises.', recommended: debtTotalNum === 0, reason: 'Your cash buffer looks light.' });
+      tiles.push({ id: 'emergency-fund-1', stage: 'foundations', title: 'Build your first emergency fund', blurb: 'Create a soft cushion for life’s surprises.', recommended: debtTotalNum === 0, reason: 'Your cash buffer looks light.' });
     }
-    tiles.push({ id: 'manage-expenses', title: 'Manage your expenses', blurb: 'Open up room to save ~20% by re‑tuning spend.', recommended: minInputs && essentialsNum / Math.max(monthlyIncome, 1) > 0.5 });
-    tiles.push({ id: 'boost-income', title: 'Boost your income', blurb: 'Practical ideas to nudge earnings without burning out.' });
+    tiles.push({ id: 'manage-expenses', stage: 'foundations', title: 'Manage your expenses', blurb: 'Open up room to save ~20% by re‑tuning spend.', recommended: minInputs && essentialsNum / Math.max(monthlyIncome, 1) > 0.5 });
+    tiles.push({ id: 'boost-income', stage: 'foundations', title: 'Boost your income', blurb: 'Practical ideas to nudge earnings without burning out.' });
     // Credit score (always available)
-    tiles.push({ id: 'improve-credit', title: 'Improve your credit score', blurb: 'Understand what moves the needle and tidy up your report.' });
+    tiles.push({ id: 'improve-credit', stage: 'foundations', title: 'Improve your credit score', blurb: 'Understand what moves the needle and tidy up your report.' });
 
     // Home goals
     if (rentSelected) {
       tiles.push({
         id: 'buy-first-home',
+        stage: 'grow',
         title: 'Buy your first home',
         blurb: 'Plan your deposit, mortgage steps, and a 12‑month path.',
         gated: true,
@@ -955,105 +1197,163 @@ export default function SimpleWorkspace() {
       });
     }
     if (ownSelected) {
-      tiles.push({ id: 'pay-off-home', title: 'Pay off your home', blurb: 'Shave years and thousands off your mortgage.', gated: true });
+      tiles.push({ id: 'pay-off-home', stage: 'grow', title: 'Pay off your home', blurb: 'Shave years and thousands off your mortgage.', gated: true });
     }
 
     // Protection (recommend when family or homeowner)
     const familyOrHome = (typeof persona.childrenCount === 'number' && persona.childrenCount > 0) || !!hasPartner || ownSelected;
-    tiles.push({ id: 'insurance-protection', title: 'Protect yourself with insurance', blurb: 'Cover the big wipe‑outs so progress sticks.', gated: !familyOrHome, recommended: familyOrHome, reason: familyOrHome ? undefined : 'We can line this up after your basics.' });
+    tiles.push({ id: 'insurance-protection', stage: 'protect', title: 'Protect yourself with insurance', blurb: 'Cover the big wipe‑outs so progress sticks.', gated: !familyOrHome, recommended: familyOrHome, reason: familyOrHome ? undefined : 'We can line this up after your basics.' });
+    protectUnlocked = !(!familyOrHome);
 
     // Savings progression
-    tiles.push({ id: 'emergency-fund-3m', title: 'Increase your emergency fund', blurb: 'Grow your cushion to ~3 months for real security.', gated: !unlocked.has('emergency-fund-3m') });
+    tiles.push({ id: 'emergency-fund-3m', stage: 'foundations', title: 'Increase your emergency fund', blurb: 'Grow your cushion to ~3 months for real security.', gated: !unlocked.has('emergency-fund-3m') });
 
     // Automation & investing (gate until foundations + cash buffer and no unhealthy debt)
-    tiles.push({ id: 'prosper-pots', title: 'Set up your Prosper Pots', blurb: 'Automate your money so good choices happen by default.', gated: !unlocked.has('prosper-pots') });
-    tiles.push({ id: 'invest-automation', title: 'Automate your investing', blurb: 'Tax‑efficient, automatic contributions toward long‑term growth.', gated: !unlocked.has('invest-automation') });
-    tiles.push({ id: 'invest-long-term', title: 'Invest for long‑term growth', blurb: 'Put your Prosper cash to work steadily over time.', gated: !unlocked.has('invest-long-term') });
+    const growGate = !unlocked.has('prosper-pots') && !unlocked.has('invest-automation') && !unlocked.has('invest-long-term');
+    tiles.push({ id: 'prosper-pots', stage: 'grow', title: 'Set up your Prosper Pots', blurb: 'Automate your money so good choices happen by default.', gated: !unlocked.has('prosper-pots') });
+    tiles.push({ id: 'invest-automation', stage: 'grow', title: 'Automate your investing', blurb: 'Tax‑efficient, automatic contributions toward long‑term growth.', gated: !unlocked.has('invest-automation') });
+    tiles.push({ id: 'invest-long-term', stage: 'grow', title: 'Invest for long‑term growth', blurb: 'Put your Prosper cash to work steadily over time.', gated: !unlocked.has('invest-long-term') });
+    growUnlocked = !growGate;
 
     // Recommend at most two
-    const recs = tiles.filter(t => t.recommended && !t.gated).slice(0, 2);
-    // Preselect up to two
-    if (selected.length === 0 && recs.length) setSelected(recs.map(r => r.id));
-    return tiles;
+    return {
+      planTiles: tiles,
+      stageUnlocks: {
+        foundations: true,
+        protect: protectUnlocked,
+        grow: growUnlocked,
+      },
+    };
   }, [netIncomeSelf, netIncomePartner, hasPartner, essentialExp, rent, mortgagePmt, cash, debtPmts, debtTotal, persona.childrenCount, persona.primaryGoal, housing, unlocked]);
+
+  const planTiles = planData.planTiles;
+  const baseStageUnlocks = planData.stageUnlocks;
+  const [activeStage, setActiveStage] = React.useState<StageKey>('foundations');
+
+  const stageBuckets = React.useMemo(() => {
+    const base: Record<StageKey, PlanTile[]> = { foundations: [], protect: [], grow: [] };
+    planTiles.forEach((tile) => {
+      base[tile.stage].push(tile);
+    });
+    return base;
+  }, [planTiles]);
+
+  const stageStats = React.useMemo<StageStats>(() => {
+    const stats: StageStats = {
+      foundations: { total: 0, done: 0, inProgress: 0, available: 0, locked: 0 },
+      protect: { total: 0, done: 0, inProgress: 0, available: 0, locked: 0 },
+      grow: { total: 0, done: 0, inProgress: 0, available: 0, locked: 0 },
+    };
+    planTiles.forEach((tile) => {
+      const status = actionProgress[tile.id] ?? 'todo';
+      const entry = stats[tile.stage];
+      entry.total += 1;
+      if (status === 'done') entry.done += 1;
+      if (status === 'in-progress') entry.inProgress += 1;
+      const gated = tile.gated && status !== 'done';
+      if (gated) entry.locked += 1;
+      else entry.available += 1;
+    });
+    return stats;
+  }, [planTiles, actionProgress]);
+
+  const stageUnlocks = React.useMemo<StageUnlocks>(() => {
+    const next: StageUnlocks = {
+      foundations: true,
+      protect: baseStageUnlocks.protect,
+      grow: baseStageUnlocks.grow,
+    };
+
+    if (baseStageUnlocks.protect) {
+      const availableFoundations = stageBuckets.foundations.filter((tile) => !(tile.gated && (actionProgress[tile.id] ?? 'todo') !== 'done'));
+      const threshold = Math.min(PROTECT_UNLOCK_THRESHOLD, Math.max(availableFoundations.length, 1));
+      next.protect = stageStats.foundations.done >= threshold || availableFoundations.length === 0;
+    }
+
+    if (baseStageUnlocks.grow) {
+      const availableFoundations = stageBuckets.foundations.filter((tile) => !(tile.gated && (actionProgress[tile.id] ?? 'todo') !== 'done'));
+      const availableProtect = stageBuckets.protect.filter((tile) => !(tile.gated && (actionProgress[tile.id] ?? 'todo') !== 'done'));
+      const foundationThreshold = Math.min(GROW_FOUNDATION_THRESHOLD, Math.max(availableFoundations.length, 1));
+      const protectThreshold = Math.min(GROW_PROTECT_THRESHOLD, Math.max(availableProtect.length, 0) || 1);
+      next.grow = (stageStats.foundations.done >= foundationThreshold && stageStats.protect.done >= protectThreshold) || (availableProtect.length === 0 && stageStats.foundations.done >= foundationThreshold);
+    }
+
+    return next;
+  }, [baseStageUnlocks, stageBuckets, stageStats, actionProgress]);
+
+  React.useEffect(() => {
+    if (stageUnlocks[activeStage]) return;
+    const firstUnlocked = PLAN_STAGE_META.find((stage) => stageUnlocks[stage.key]);
+    if (firstUnlocked) setActiveStage(firstUnlocked.key);
+  }, [stageUnlocks, activeStage]);
+
+  const stageOrder: StageKey[] = ['foundations', 'protect', 'grow'];
+  const actionQueue = React.useMemo(() => {
+    const queue: PlanTile[] = [];
+    const weight: Record<ActionStatus, number> = { 'in-progress': 0, todo: 1, 'done': 2 };
+    stageOrder.forEach((stage) => {
+      const unlocked = stage === 'foundations' ? true : stageUnlocks[stage];
+      const tiles = stageBuckets[stage];
+      tiles
+        .filter((tile) => {
+          const status = actionProgress[tile.id] ?? 'todo';
+          if (status === 'done') return false;
+          if (!unlocked) return false;
+          if (tile.gated && status !== 'done') return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const statusA = actionProgress[a.id] ?? 'todo';
+          const statusB = actionProgress[b.id] ?? 'todo';
+          const statusOrder = weight[statusA] - weight[statusB];
+          if (statusOrder !== 0) return statusOrder;
+          if (Boolean(a.recommended) !== Boolean(b.recommended)) return a.recommended ? -1 : 1;
+          return 0;
+        })
+        .forEach((tile) => queue.push(tile));
+    });
+    return queue;
+  }, [stageBuckets, stageUnlocks, actionProgress]);
+
+  React.useEffect(() => {
+    const focusIds = actionQueue.slice(0, MAX_ACTIVE_ACTIONS).map((tile) => tile.id);
+    setSelected((prev) => {
+      if (prev.length === focusIds.length && prev.every((id, idx) => id === focusIds[idx])) {
+        return prev;
+      }
+      return focusIds;
+    });
+  }, [actionQueue]);
+
+  const lockCopy = React.useMemo(() => {
+    if (stageUnlocks[activeStage]) return null;
+    if (!baseStageUnlocks[activeStage]) {
+      if (activeStage === 'protect') return "We'll surface Protect once your plan says it's time. Keep building your foundations for now.";
+      if (activeStage === 'grow') return "Grow unlocks after your buffers and protections are in good shape. Stick with the earlier wins first.";
+      return "We'll unlock this stage when your plan signals it.";
+    }
+    if (activeStage === 'protect') {
+      const remaining = Math.max(PROTECT_UNLOCK_THRESHOLD - stageStats.foundations.done, 0);
+      if (remaining <= 0) return 'We’ll unlock this stage when your plan refreshes.';
+      return `Complete ${remaining} more foundation action${remaining === 1 ? '' : 's'} to unlock Protect.`;
+    }
+    if (activeStage === 'grow') {
+      const needFoundations = Math.max(GROW_FOUNDATION_THRESHOLD - stageStats.foundations.done, 0);
+      const needProtect = Math.max(GROW_PROTECT_THRESHOLD - stageStats.protect.done, 0);
+      const parts: string[] = [];
+      if (needFoundations > 0) parts.push(`${needFoundations} more foundation action${needFoundations === 1 ? '' : 's'}`);
+      if (needProtect > 0) parts.push(`${needProtect} protect action${needProtect === 1 ? '' : 's'}`);
+      if (!parts.length) return 'We’ll unlock Grow when your plan refreshes.';
+      return `Complete ${parts.join(' and ')} to unlock Grow.`;
+    }
+    return 'Complete the actions in earlier stages to unlock this step.';
+  }, [stageUnlocks, activeStage, stageStats, baseStageUnlocks]);
 
   const selectedTitles = React.useMemo(() => (
     selected
       .map((id) => planTiles.find((tile) => tile.id === id)?.title)
       .filter((title): title is string => Boolean(title))
   ), [selected, planTiles]);
-
-  const toggleSelect = (id: string) => {
-    setSelected(prev => {
-      const exists = prev.includes(id);
-      if (exists) return prev.filter(x => x !== id);
-      const next = [...prev, id];
-      if (next.length > 2) next.shift();
-      log('simple_select_action', { id });
-      return next;
-    });
-  };
-
-  const buildPlan = async () => {
-    await flushPendingChanges();
-    setSaving(true); setError(null);
-    try {
-      const slots: Record<string, { value: SlotVal; confidence?: string }> = {};
-      const toNum = (v: string) => planeNumber(v);
-      if (persona.country) slots['country'] = { value: persona.country };
-      if (persona.ageDecade && persona.ageDecade !== 'unspecified') {
-        // Approximate birth year by decade midpoint
-        const decade = persona.ageDecade.replace('s', '');
-        const now = new Date().getUTCFullYear();
-        const approxAge = Number(decade) ? Number(decade) + 5 : null;
-        const birth = approxAge ? now - approxAge : null;
-        if (birth) slots['birth_year'] = { value: birth };
-      }
-      if (typeof persona.partner === 'boolean') slots['partner'] = { value: persona.partner };
-      if (typeof persona.childrenCount === 'number') slots['dependants_count'] = { value: persona.childrenCount };
-      const selfInc = toNum(netIncomeSelf); if (selfInc != null) slots['net_income_monthly_self'] = { value: selfInc };
-      const partnerInc = toNum(netIncomePartner); if (hasPartner && partnerInc != null) slots['net_income_monthly_partner'] = { value: partnerInc };
-      const ess = toNum(essentialExp); if (ess != null) slots['essential_expenses_monthly'] = { value: ess };
-      const totalExp = toNum(totalExpenses); if (totalExp != null) slots['total_expenses_monthly'] = { value: totalExp };
-      const grossSelf = toNum(grossIncomeSelf); if (grossSelf != null) slots['gross_income_annual_self'] = { value: grossSelf };
-      const grossPartner = toNum(grossIncomePartner); if (hasPartner && grossPartner != null) slots['gross_income_annual_partner'] = { value: grossPartner };
-      slots['housing_status'] = { value: housing };
-      const r = toNum(rent); if (housing === 'rent' && r != null) slots['rent_monthly'] = { value: r };
-      const m = toNum(mortgagePmt); if (housing === 'own' && m != null) slots['mortgage_payment_monthly'] = { value: m };
-      const running = toNum(housingRunningCosts); if (running != null) slots['housing_running_costs_monthly'] = { value: running };
-      const c = toNum(cash); if (c != null) slots['cash_liquid_total'] = { value: c };
-      const emergency = toNum(emergencySavings); if (emergency != null) slots['emergency_savings_liquid'] = { value: emergency };
-      const term = toNum(termDeposits); if (term != null) slots['term_deposits_le_3m'] = { value: term };
-      const invest = toNum(investmentsTotal); if (invest != null) slots['investments_ex_home_total'] = { value: invest };
-      const pension = toNum(pensionTotal); if (pension != null) slots['pension_balance_total'] = { value: pension };
-      const home = toNum(homeValue); if (home != null) slots['home_value'] = { value: home };
-      const mortBal = toNum(mortgageBalance); if (mortBal != null) slots['mortgage_balance'] = { value: mortBal };
-      const dpm = toNum(debtPmts); if (dpm != null) slots['other_debt_payments_monthly_total'] = { value: dpm };
-      const dt = toNum(debtTotal); if (dt != null) slots['other_debt_balances_total'] = { value: dt };
-      const shortTerm = toNum(shortTermLiabilities); if (shortTerm != null) slots['short_term_liabilities_12m'] = { value: shortTerm };
-      const assets = toNum(assetsTotal); if (assets != null) slots['assets_total'] = { value: assets };
-      const liabilities = toNum(liabilitiesTotal); if (liabilities != null) slots['debts_total'] = { value: liabilities };
-
-      const res = await fetch('/api/prosper/snapshots', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inputs: { slots, onboarding: { chosen_actions: selected } } }),
-      });
-      if (res.status === 402) {
-        await res.json().catch(() => ({}));
-        setError('Free limit reached — please sign in or upgrade to continue.');
-      } else if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        setError(j?.error || 'Could not build your plan yet.');
-      } else {
-        log('simple_build_plan', { selected });
-        try { await fetchDashboard(); } catch {}
-      }
-    } catch {
-      setError('Something went wrong while saving.');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   function buildChecklist(title: string): string[] {
     const t = title.toLowerCase();
@@ -1279,66 +1579,64 @@ export default function SimpleWorkspace() {
                       </div>
                     </div>
 
-                    <div>
-                      <div className="text-sm text-white/80 mb-3">Your Prosper actions</div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {planTiles.map((tile) => (
-                          <div
-                            key={tile.id}
-                            className={`text-left rounded-xl border p-4 transition ${
-                              tile.gated
-                                ? 'border-white/10 bg-white/5 text-white/50 cursor-not-allowed'
-                                : selected.includes(tile.id)
-                                  ? 'border-emerald-400/60 bg-emerald-400/10 text-white'
-                                  : 'border-white/15 bg-white/8 text-white/90 hover:bg-white/12'
-                            }`}
-                            onClick={() => { if (!tile.gated) openExplain(tile.title); }}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="font-medium">{tile.title}</div>
-                                <div className="text-xs mt-1 opacity-80">{tile.blurb}</div>
-                                {tile.reason && <div className="text-[11px] mt-1 opacity-70">{tile.reason}</div>}
-                              </div>
-                              {!tile.gated ? (
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); toggleSelect(tile.id); }}
-                                  role="switch"
-                                  aria-checked={selected.includes(tile.id)}
-                                  aria-label={`Select action: ${tile.title}`}
-                                  className={`inline-flex h-6 w-6 items-center justify-center rounded-full border text-xs ${selected.includes(tile.id) ? 'border-emerald-300 bg-emerald-300/20' : 'border-white/30'}`}
-                                >
-                                  {selected.includes(tile.id) ? '✓' : '+'}
-                                </button>
-                              ) : (
-                                <span className="text-[10px] px-2 py-1 rounded-full border border-white/20">Locked</span>
-                              )}
-                            </div>
+                    <div className="space-y-2">
+                      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+                        <div>
+                          <div className="text-sm text-white/80">Your Prosper Path</div>
+                          <div className="text-xs text-white/70 mt-1">We’ll focus on one step at a time and unlock later stages after each win.</div>
+                        </div>
+                        {selectedTitles.length > 0 && (
+                          <div className="inline-flex flex-wrap items-center gap-2 text-xs text-white/65">
+                            <span className="uppercase tracking-widest text-white/40">In focus</span>
+                            <span>{selectedTitles.join(' → ')}</span>
                           </div>
-                        ))}
+                        )}
                       </div>
-                      <div className="text-xs text-white/70 mt-2">Pick up to two. We’ll unlock more after your first wins.</div>
                     </div>
 
-                    {selectedTitles.length > 0 && (
-                      <div className="text-xs text-white/70">
-                        Selected: {selectedTitles.join(', ')}
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {PLAN_STAGE_META.map((stage) => {
+                          const unlocked = stageUnlocks[stage.key];
+                          const isActiveStage = stage.key === activeStage;
+                          return (
+                            <button
+                              key={stage.key}
+                              type="button"
+                              onClick={() => unlocked && setActiveStage(stage.key)}
+                              disabled={!unlocked}
+                              className={`px-3 py-1.5 rounded-full text-xs uppercase tracking-wide border transition ${
+                                isActiveStage
+                                  ? 'border-emerald-300 bg-emerald-300/15 text-white shadow'
+                                  : unlocked
+                                    ? 'border-white/20 bg-white/5 text-white/80 hover:text-white'
+                                    : 'border-white/10 bg-white/5 text-white/40 cursor-not-allowed backdrop-blur-sm'
+                              }`}
+                            >
+                              {stage.label}
+                            </button>
+                          );
+                        })}
                       </div>
+                      <div className="text-xs text-white/60">{PLAN_STAGE_META.find((s) => s.key === activeStage)?.sublabel}</div>
+                    </div>
+
+                    {!stageUnlocks[activeStage] ? (
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
+                        {lockCopy || 'Complete the actions in earlier stages to unlock this step.'}
+                      </div>
+                    ) : (
+                      <PlanStageActions
+                        stage={activeStage}
+                        tiles={stageBuckets[activeStage]}
+                        selected={selected}
+                        openExplain={openExplain}
+                        actionProgress={actionProgress}
+                        stats={stageStats[activeStage]}
+                      />
                     )}
 
                     {error && <div className="text-sm text-red-200">{error}</div>}
-
-                    <div className="flex flex-col md:flex-row items-center gap-3">
-                      <button
-                        onClick={buildPlan}
-                        disabled={saving}
-                        className="inline-flex items-center justify-center rounded-full bg-emerald-500 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
-                      >
-                        {saving ? 'Building your plan…' : 'Build my Prosper Plan →'}
-                      </button>
-                      <div className="text-xs text-white/70">Takes under a minute. We’ll pick the first 2 actions together.</div>
-                    </div>
 
                     <div className="text-xs text-white/60">
                       Need to tweak your inputs?{' '}
@@ -1456,6 +1754,17 @@ export default function SimpleWorkspace() {
                       <span>These numbers update instantly in your Plan and Health tabs.</span>
                       {autoSaving && <span className="text-white/60">Saving…</span>}
                     </div>
+
+                    {dataWarnings.length > 0 && (
+                      <div className="rounded-xl border border-amber-300/50 bg-amber-300/15 p-3 text-xs text-amber-50">
+                        <div className="text-sm font-medium text-amber-50">Quick double-check</div>
+                        <ul className="mt-2 space-y-1 pl-4 list-disc marker:text-amber-100">
+                          {dataWarnings.map((warning) => (
+                            <li key={warning} className="text-amber-100/90">{warning}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
                     <DataSection title="Personal details" description="These are prefetched from your conversations. Update anything that has changed.">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1716,20 +2025,33 @@ export default function SimpleWorkspace() {
               >
                 Why now?
               </button>
-              <button
-                disabled={!checklist.every((s) => !!checked[s])}
-                onClick={async () => {
-                  // Mark done
-                  try { await fetch('/api/actions/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: explainingTitle, action_id: explainingTitle.toLowerCase().replace(/[^a-z0-9]+/g,'-') }) }); } catch {}
-                  // Voice celebration
-                  try { explainInterrupt(); explainSendText(`Nice work — you just completed ${explainingTitle}. Take a second to notice what helped.`); explainSendEvent({ type: 'response.create' }); } catch {}
-                  // Local confetti
-                  setCelebrateKey((k) => k + 1); setCelebrateOn(true); setTimeout(() => setCelebrateOn(false), 2200);
-                }}
-                className="rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-4 py-1.5 text-sm"
-              >
-                Mark done
-              </button>
+              {explainingTile && (
+                <button
+                  disabled={!checklist.every((s) => !!checked[s])}
+                  onClick={async () => {
+                    try {
+                      await fetch('/api/actions/complete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title: explainingTile.title, action_id: explainingTile.id }),
+                      });
+                    } catch {}
+                    setActionStatus(explainingTile.id, 'done');
+                    log('simple_action_completed', { id: explainingTile.id, stage: explainingTile.stage });
+                    try {
+                      explainInterrupt();
+                      explainSendText(`Nice work — you just completed ${explainingTile.title}. Take a second to notice what helped.`);
+                      explainSendEvent({ type: 'response.create' });
+                    } catch {}
+                    setCelebrateKey((k) => k + 1);
+                    setCelebrateOn(true);
+                    setTimeout(() => setCelebrateOn(false), 2200);
+                  }}
+                  className="rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-4 py-1.5 text-sm"
+                >
+                  Mark done
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1757,20 +2079,31 @@ export default function SimpleWorkspace() {
         </div>
       )}
 
-      {/* Voice dock placeholder to match app style */}
-      <div className="hidden md:block fixed bottom-4 right-4 z-30">
-        <Link href="/app" className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm text-white/90 hover:bg-white/20">Open full app</Link>
-      </div>
       {/* Styles moved to globals.css: .field, .btn, .btn-active, focus-visible ring */}
     </div>
     </div>
   );
 }
 
-function Field({ label, suffix, children }: { label: string; suffix?: string; children: React.ReactNode }) {
+function Tooltip({ text }: { text: string }) {
+  return (
+    <span
+      className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/30 text-[10px] leading-none text-white/70"
+      title={text}
+      aria-label={text}
+    >
+      i
+    </span>
+  );
+}
+
+function Field({ label, suffix, hint, children }: { label: string; suffix?: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <div className="text-xs text-white/70 mb-1">{label}{suffix ? <span className="opacity-60"> {' '}{suffix}</span> : null}</div>
+      <div className="text-xs text-white/70 mb-1 flex items-center gap-1">
+        <span>{label}{suffix ? <span className="opacity-60"> {' '}{suffix}</span> : null}</span>
+        {hint ? <Tooltip text={hint} /> : null}
+      </div>
       {children}
     </label>
   );

@@ -66,7 +66,7 @@ export default function Page() {
               Get a step-by-step plan to build long term wealth
             </p>
             <div className="flex w-full max-w-[520px] flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-              <WaitlistForm includeName={false} buttonLabel="Join Waitlist" placeholder="Enter your email" />
+              <WaitlistForm includeName={false} buttonLabel="Get early access" placeholder="Enter your email" />
             </div>
             <p className="text-xs text-dim md:text-sm">
               <ScarcityCounter />
