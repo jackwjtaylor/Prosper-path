@@ -5,8 +5,6 @@ import { hapticToggle } from "@/app/lib/haptics";
 
 interface LeftPaneControlsProps {
   onToggleConnection: () => void;
-  handleTalkButtonDown: () => void;
-  handleTalkButtonUp: () => void;
 }
 
 /**
@@ -16,8 +14,6 @@ interface LeftPaneControlsProps {
  */
 export default function LeftPaneControls({
   onToggleConnection,
-  handleTalkButtonDown,
-  handleTalkButtonUp,
 }: LeftPaneControlsProps) {
   const sessionStatus = useAppStore(s => s.sessionStatus);
   // PTT and audio playback controls are hidden in voice-first mode

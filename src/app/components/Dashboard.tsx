@@ -326,8 +326,8 @@ export default function Dashboard() {
 
       // Derive monthly savings from income/expenses; fallback to savings rate
       const slots = (latest as any)?.inputs?.slots;
-      let income = Number(aggregates?.income || 0);
-      let expenses = Number(aggregates?.expenses || 0);
+      const income = Number(aggregates?.income || 0);
+      const expenses = Number(aggregates?.expenses || 0);
       let monthlySave = Number.isFinite(income) && Number.isFinite(expenses) && income > 0 ? Math.max(0, income - expenses) : 0;
       if (!(monthlySave > 0)) {
         const sr = Number(kpis?.sr);
@@ -446,12 +446,6 @@ export default function Dashboard() {
     !(anyVal(['cash_liquid_total']) != null || anyVal(['emergency_savings_liquid']) != null),
   ].reduce((acc, isMissing) => acc + (isMissing ? 1 : 0), 0);
   // Show hint only if overrides are present AND components are missing (i.e., override is actually in use)
-  const componentsAssetsPresent = (slotsAny?.home_value?.value != null) || (slotsAny?.investments_ex_home_total?.value != null) || (slotsAny?.cash_liquid_total?.value != null) || (slotsAny?.pension_balance_total?.value != null);
-  const componentsLiabsPresent = (slotsAny?.mortgage_balance?.value != null) || (slotsAny?.other_debt_balances_total?.value != null);
-  const assetsOverrideUsed = (slotsAny?.assets_total?.value != null) && !componentsAssetsPresent;
-  const debtsOverrideUsed = (slotsAny?.debts_total?.value != null) && !componentsLiabsPresent;
-  // const hasNwOverrides = assetsOverrideUsed || debtsOverrideUsed; // presently unused
-
   // Broadcast data view + missing-required status to the header
   React.useEffect(() => {
     try {
@@ -704,7 +698,7 @@ export default function Dashboard() {
                               ))}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-gray-600">
-                              {Object.entries(A).map(([k, v], i) => (
+                              {Object.entries(A).map(([k], i) => (
                                 <span key={k} className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded" style={{ backgroundColor: colorsA[i % colorsA.length] }} />{k}</span>
                               ))}
                             </div>
@@ -1285,7 +1279,7 @@ function ActionPlan({ recs, kpis, onWin }: { recs: any; kpis: any; onWin?: (titl
 
   const markDone = async (title: string, action_id?: string) => {
     try {
-      let headers: any = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       try { const supa = getSupabaseClient(); if (supa) { const { data } = await supa.auth.getSession(); const token = data?.session?.access_token; if (token) headers.Authorization = `Bearer ${token}`; } } catch {}
       await fetch('/api/actions/complete', { method: 'POST', headers, body: JSON.stringify({ householdId, title, action_id }) });
       // Optimistically update
@@ -1293,13 +1287,15 @@ function ActionPlan({ recs, kpis, onWin }: { recs: any; kpis: any; onWin?: (titl
       if (action_id) setCompletedIds((prev) => Array.from(new Set([...prev, action_id])));
       setCompletedItems((prev) => [{ id: Math.random().toString(36).slice(2), title, completed_at: new Date().toISOString() }, ...prev]);
       triggerConfetti();
-      try { onWin && onWin(title); } catch {}
+      try {
+        if (onWin) onWin(title);
+      } catch {}
     } catch {}
   };
 
   const dismiss = async (title: string, action_id?: string) => {
     try {
-      let headers: any = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       try { const supa = getSupabaseClient(); if (supa) { const { data } = await supa.auth.getSession(); const token = data?.session?.access_token; if (token) headers.Authorization = `Bearer ${token}`; } } catch {}
       await fetch('/api/actions/dismiss', { method: 'POST', headers, body: JSON.stringify({ householdId, title, action_id }) });
       setDismissedTitles((prev) => Array.from(new Set([...prev, title.toLowerCase()])));
@@ -1310,7 +1306,7 @@ function ActionPlan({ recs, kpis, onWin }: { recs: any; kpis: any; onWin?: (titl
   // Legacy item markup removed (ActionCard is used exclusively)
 
   // New ActionItem using ActionCard UI
-  const ActionItem = ({ action_id, title, how, relevant, reason, completed }: { action_id?: string; title: string; how: any; relevant: boolean; reason: string; completed?: boolean }) => (
+  const ActionItem = ({ action_id, title, how, reason, completed }: { action_id?: string; title: string; how: any; reason: string; completed?: boolean }) => (
     <ActionCard
       title={title}
       why={reason}
@@ -1391,7 +1387,7 @@ function ActionPlan({ recs, kpis, onWin }: { recs: any; kpis: any; onWin?: (titl
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         {visible.map((r) => (
-          <ActionItem key={`u-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} relevant={(r as any).relevant} reason={(r as any).reason} completed={isCompleted(r)} />
+          <ActionItem key={`u-${r.action_id || r.title}`} action_id={r.action_id} title={r.title} how={(r as any).how} reason={(r as any).reason} completed={isCompleted(r)} />
         ))}
       </div>
       {/* Completed items remain inline above with a badge */}
@@ -1781,94 +1777,6 @@ function UserDataCard({ latest, currency }: { latest: Snapshot | null; currency:
 }
 
 // Removed unused components: CompletedActions, MomentumStreak, SortedV2Kpis
-
-function RangeNetWorth({ series, latest, currency }: { series: SeriesPoint[]; latest: Snapshot | null; currency: string }) {
-  const [range, setRange] = React.useState<'1m'|'3m'|'1y'|'all'>('3m');
-  const trajectory = React.useMemo(() => {
-    if (!series?.length) return 'flat';
-    const last = series[series.length-1]?.value ?? 0;
-    const prev = series.length > 1 ? series[series.length-2]?.value ?? 0 : 0;
-    if (!Number.isFinite(last) || !Number.isFinite(prev)) return 'flat';
-    if (last > prev) return 'up';
-    if (last < prev) return 'down';
-    return 'flat';
-  }, [series]);
-  const filtered = React.useMemo(() => {
-    if (!series?.length) return [] as SeriesPoint[];
-    if (range === 'all') return series;
-    const now = new Date(series[series.length-1].ts).getTime();
-    const delta = range === '1m' ? 30 : range === '3m' ? 90 : 365;
-    return series.filter(p => {
-      const t = new Date(p.ts).getTime();
-      return (now - t) <= delta*24*60*60*1000;
-    });
-  }, [series, range]);
-
-  // Compute a simple assets vs liabilities breakdown from the latest inputs
-  const breakdown = React.useMemo(() => {
-    try {
-      const slots = (latest as any)?.inputs?.slots;
-      if (!slots) return null;
-      const norm = normaliseSlots(slots as any);
-      const assets = typeof norm.total_assets === 'number' ? norm.total_assets : null;
-      const debts = typeof norm.total_liabilities === 'number' ? norm.total_liabilities : null;
-      const nw = typeof norm.net_worth === 'number' ? norm.net_worth : (assets != null && debts != null ? assets - debts : null);
-      return { assets, debts, nw } as { assets: number | null; debts: number | null; nw: number | null };
-    } catch {
-      return null;
-    }
-  }, [latest]);
-
-  return (
-    <div>
-      <div className="text-[11px] text-gray-600 mb-1">
-        Trajectory: {trajectory === 'up' ? <span className="text-emerald-600">Up ▲</span> : trajectory === 'down' ? <span className="text-red-600">Down ▼</span> : 'Flat'}
-      </div>
-      <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
-        {(['1m','3m','1y','all'] as const).map(r => (
-          <button
-            key={r}
-            onClick={() => setRange(r)}
-            className={`px-2 py-1 rounded border ${range===r ? 'bg-gray-900 text-white border-gray-900' : 'bg-white hover:bg-gray-50'}`}
-          >
-            {r.toUpperCase()}
-          </button>
-        ))}
-      </div>
-      <Sparkline points={filtered} />
-
-      {breakdown && (breakdown.assets != null || breakdown.debts != null) && (
-        <div className="mt-3">
-          <div className="text-[11px] text-gray-600 mb-1">Assets vs liabilities</div>
-          {/* Stacked bar: red portion shows liabilities as a share of assets; green is equity portion. */}
-          {typeof breakdown.assets === 'number' && breakdown.assets > 0 ? (
-            <div className="w-full h-4 rounded bg-gray-200 overflow-hidden" aria-label="Assets and liabilities breakdown">
-              {(() => {
-                const assets = breakdown.assets as number;
-                const debts = Math.max(0, (breakdown.debts as number) || 0);
-                const debtPct = Math.min(1, debts / Math.max(assets, 1e-9));
-                const equityPct = Math.max(0, 1 - debtPct);
-                return (
-                  <div className="w-full h-full flex">
-                    <div className="h-full" style={{ width: `${Math.round(debtPct * 100)}%`, backgroundColor: '#ef4444' }} title={`Liabilities: ${fmtCurrency(debts, currency)}`} />
-                    <div className="h-full" style={{ width: `${Math.round(equityPct * 100)}%`, backgroundColor: '#10b981' }} title={`Equity: ${fmtCurrency(Math.max(assets - debts, 0), currency)}`} />
-                  </div>
-                );
-              })()}
-            </div>
-          ) : (
-            <div className="text-[11px] text-gray-500">Add assets and debts to see a breakdown.</div>
-          )}
-          <div className="mt-1 text-[11px] text-gray-700 flex items-center gap-3">
-            <span>Assets: <b>{typeof breakdown.assets === 'number' ? fmtCurrency(breakdown.assets, currency) : '—'}</b></span>
-            <span>• Liabilities: <b>{typeof breakdown.debts === 'number' ? fmtCurrency(Math.max(breakdown.debts, 0), currency) : '—'}</b></span>
-            <span>• Net worth: <b>{typeof breakdown.nw === 'number' ? fmtCurrency(breakdown.nw, currency) : '—'}</b></span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 /** KPI Grid with pillar filters */
 function KpiGrid({ kpis }: { kpis: any }) {

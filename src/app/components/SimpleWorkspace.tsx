@@ -1,12 +1,14 @@
 "use client";
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
+import BackgroundVideo from '@/app/components/BackgroundVideo';
 import { useRealtimeSession } from '@/app/hooks/useRealtimeSession';
 import { makeRealtimeAgent, realtimeOnlyCompanyName } from '@/app/agentConfigs/realtimeOnly';
 import { createModerationGuardrail } from '@/app/agentConfigs/guardrails';
 import { useAppStore } from '@/app/state/store';
 import { useOnboardingStore } from '@/app/state/onboarding';
-import type { AgeDecade, TonePreference } from '@/app/state/onboarding';
+import type { AgeDecade, TonePreference, OnboardingDraft } from '@/app/state/onboarding';
 import { ensureHouseholdId } from '@/app/lib/householdLocal';
 import Sparkline from '@/app/components/ui/Sparkline';
 import LevelPill from '@/app/components/ui/LevelPill';
@@ -49,6 +51,119 @@ const TONE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'straight', label: 'Straight-talk' },
   { value: 'relaxed', label: 'Laid back' },
 ];
+
+type NumericFieldKey =
+  | 'netIncomeSelf'
+  | 'netIncomePartner'
+  | 'essentialExp'
+  | 'totalExpenses'
+  | 'grossIncomeSelf'
+  | 'grossIncomePartner'
+  | 'rent'
+  | 'mortgagePmt'
+  | 'cash'
+  | 'emergencySavings'
+  | 'termDeposits'
+  | 'investmentsTotal'
+  | 'pensionTotal'
+  | 'homeValue'
+  | 'mortgageBalance'
+  | 'housingRunningCosts'
+  | 'debtPmts'
+  | 'debtTotal'
+  | 'shortTermLiabilities'
+  | 'assetsTotal'
+  | 'liabilitiesTotal';
+
+const NUMERIC_FIELD_KEYS: NumericFieldKey[] = [
+  'netIncomeSelf',
+  'netIncomePartner',
+  'essentialExp',
+  'totalExpenses',
+  'grossIncomeSelf',
+  'grossIncomePartner',
+  'rent',
+  'mortgagePmt',
+  'cash',
+  'emergencySavings',
+  'termDeposits',
+  'investmentsTotal',
+  'pensionTotal',
+  'homeValue',
+  'mortgageBalance',
+  'housingRunningCosts',
+  'debtPmts',
+  'debtTotal',
+  'shortTermLiabilities',
+  'assetsTotal',
+  'liabilitiesTotal',
+];
+
+const FIELD_SLOT_MAP: Record<NumericFieldKey, string> = {
+  netIncomeSelf: 'net_income_monthly_self',
+  netIncomePartner: 'net_income_monthly_partner',
+  essentialExp: 'essential_expenses_monthly',
+  totalExpenses: 'total_expenses_monthly',
+  grossIncomeSelf: 'gross_income_annual_self',
+  grossIncomePartner: 'gross_income_annual_partner',
+  rent: 'rent_monthly',
+  mortgagePmt: 'mortgage_payment_monthly',
+  cash: 'cash_liquid_total',
+  emergencySavings: 'emergency_savings_liquid',
+  termDeposits: 'term_deposits_le_3m',
+  investmentsTotal: 'investments_ex_home_total',
+  pensionTotal: 'pension_balance_total',
+  homeValue: 'home_value',
+  mortgageBalance: 'mortgage_balance',
+  housingRunningCosts: 'housing_running_costs_monthly',
+  debtPmts: 'other_debt_payments_monthly_total',
+  debtTotal: 'other_debt_balances_total',
+  shortTermLiabilities: 'short_term_liabilities_12m',
+  assetsTotal: 'assets_total',
+  liabilitiesTotal: 'debts_total',
+};
+
+const SLOT_TO_FIELD = Object.entries(FIELD_SLOT_MAP).reduce<Record<string, NumericFieldKey>>((acc, [field, slot]) => {
+  acc[slot] = field as NumericFieldKey;
+  return acc;
+}, {});
+
+const FIELD_LABELS: Record<NumericFieldKey, string> = {
+  netIncomeSelf: 'Net income (you)',
+  netIncomePartner: 'Net income (partner)',
+  essentialExp: 'Essential expenses',
+  totalExpenses: 'Total expenses',
+  grossIncomeSelf: 'Gross income (you)',
+  grossIncomePartner: 'Gross income (partner)',
+  rent: 'Rent',
+  mortgagePmt: 'Mortgage payment',
+  cash: 'Cash on hand',
+  emergencySavings: 'Emergency savings',
+  termDeposits: 'Term deposits',
+  investmentsTotal: 'Investments',
+  pensionTotal: 'Pension balance',
+  homeValue: 'Home value',
+  mortgageBalance: 'Mortgage balance',
+  housingRunningCosts: 'Housing running costs',
+  debtPmts: 'Debt payments (monthly)',
+  debtTotal: 'Other debts total',
+  shortTermLiabilities: 'Short-term liabilities',
+  assetsTotal: 'Total assets',
+  liabilitiesTotal: 'Total debts',
+};
+
+function planeNumber(v: string): number | null {
+  const n = Number((v || '').replace(/[,\s]/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+function createEmptyFieldRecord(): Record<NumericFieldKey, string> {
+  const obj = {} as Record<NumericFieldKey, string>;
+  for (const key of NUMERIC_FIELD_KEYS) {
+    obj[key] = '';
+  }
+  return obj;
+}
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
@@ -174,6 +289,7 @@ export default function SimpleWorkspace() {
   const persona = useOnboardingStore((s) => s.persona);
   const draft = useOnboardingStore((s) => s.draft);
   const updatePersona = useOnboardingStore((s) => s.updatePersona);
+  const updateDraftStore = useOnboardingStore((s) => s.updateDraft);
   const selectedVoice = useAppStore((s) => s.voice);
   const [activeTab, setActiveTab] = React.useState<TabKey>('plan');
   const [householdId, setHouseholdId] = React.useState<string>('');
@@ -186,21 +302,306 @@ export default function SimpleWorkspace() {
     return () => clearTimeout(t);
   }, []);
 
-  // Snapshot fields (minimal set to compute)
-  const [netIncomeSelf, setNetIncomeSelf] = React.useState<string>('');
+  // Form state for numeric slots and tracking changes
   const [hasPartner, setHasPartner] = React.useState<boolean>(!!persona.partner);
-  const [netIncomePartner, setNetIncomePartner] = React.useState<string>('');
-  const [essentialExp, setEssentialExp] = React.useState<string>('');
   const [housing, setHousing] = React.useState<'rent'|'own'|'other'>('rent');
-  const [rent, setRent] = React.useState<string>('');
-  const [mortgagePmt, setMortgagePmt] = React.useState<string>('');
-  const [cash, setCash] = React.useState<string>('');
-  const [debtPmts, setDebtPmts] = React.useState<string>('');
-  const [debtTotal, setDebtTotal] = React.useState<string>('');
+  const [fieldValues, setFieldValues] = React.useState<Record<NumericFieldKey, string>>(() => createEmptyFieldRecord());
+  const dirtyFieldsRef = React.useRef<Set<NumericFieldKey>>(new Set());
+  const lastServerValuesRef = React.useRef<Record<NumericFieldKey, string>>(createEmptyFieldRecord());
+  const housingDirtyRef = React.useRef<boolean>(false);
+  const partnerDirtyRef = React.useRef<boolean>(false);
+  const saveTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFlushingRef = React.useRef<boolean>(false);
+  const fieldValuesRef = React.useRef(fieldValues);
+  React.useEffect(() => { fieldValuesRef.current = fieldValues; }, [fieldValues]);
+  const hasPartnerRef = React.useRef(hasPartner);
+  React.useEffect(() => { hasPartnerRef.current = hasPartner; }, [hasPartner]);
+  const housingRef = React.useRef(housing);
+  React.useEffect(() => { housingRef.current = housing; }, [housing]);
   const [saving, setSaving] = React.useState<boolean>(false);
+  const [autoSaving, setAutoSaving] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
   const [selected, setSelected] = React.useState<string[]>([]);
   const [unlocked, setUnlocked] = React.useState<Set<string>>(new Set());
+  const [computedNetWorth, setComputedNetWorth] = React.useState<number | null>(null);
+
+  const applyServerField = React.useCallback((key: NumericFieldKey, value: string | number | null | undefined) => {
+    const next = value == null ? '' : String(value);
+    lastServerValuesRef.current[key] = next;
+    if (dirtyFieldsRef.current.has(key)) return;
+    setFieldValues((prev) => (prev[key] === next ? prev : { ...prev, [key]: next }));
+  }, []);
+
+  const resetHousehold = React.useCallback(async () => {
+    try {
+      const freshId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+      const res = await fetch(`/api/household/switch?householdId=${encodeURIComponent(freshId)}`, { cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json?.id) {
+        try { localStorage.setItem('pp_household_id', json.id); } catch {}
+        setHouseholdId(json.id as string);
+        return json.id as string;
+      }
+    } catch {}
+    try { localStorage.removeItem('pp_household_id'); } catch {}
+    const fallback = await ensureHouseholdId();
+    setHouseholdId(fallback);
+    return fallback;
+  }, [setHouseholdId]);
+
+  const applyDashboard = React.useCallback((payload: DashboardSummary | null) => {
+    if (!payload) return;
+    const latest = payload.latestSnapshot ?? null;
+    const slots = ((latest?.inputs?.slots || {}) as Record<string, any>) || {};
+    const slotValue = (key: string) => {
+      const raw = slots?.[key];
+      if (raw && typeof raw === 'object' && 'value' in raw) return raw.value;
+      return raw;
+    };
+    const toNum = (v: any) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const partnerVal = slotValue('partner');
+    if (partnerVal != null) {
+      const bool = typeof partnerVal === 'boolean' ? partnerVal : partnerVal === 'true' || partnerVal === '1' || partnerVal === 1;
+      setHasPartner(Boolean(bool));
+    }
+    const housingVal = slotValue('housing_status');
+    if (housingVal === 'rent' || housingVal === 'own' || housingVal === 'other') {
+      setHousing(housingVal);
+    }
+    for (const key of NUMERIC_FIELD_KEYS) {
+      const slotKey = FIELD_SLOT_MAP[key];
+      const raw = slotValue(slotKey);
+      if (raw == null || raw === '') continue;
+      const numeric = toNum(raw);
+      applyServerField(key, numeric ?? raw);
+    }
+    const numericSlot = (key: string) => {
+      const raw = slotValue(key);
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const totalAssetsOverride = numericSlot('assets_total');
+    const totalDebtsOverride = numericSlot('debts_total');
+    const liquid = numericSlot('cash_liquid_total') + numericSlot('emergency_savings_liquid') + numericSlot('term_deposits_le_3m');
+    const investable = numericSlot('investments_ex_home_total') + numericSlot('pension_balance_total');
+    const property = numericSlot('home_value');
+    const mortgage = numericSlot('mortgage_balance');
+    const otherDebt = numericSlot('other_debt_balances_total');
+    let totalAssets = liquid + investable + property;
+    let totalDebts = mortgage + otherDebt;
+    if (totalAssets === 0 && totalAssetsOverride) totalAssets = totalAssetsOverride;
+    if (totalDebts === 0 && totalDebtsOverride) totalDebts = totalDebtsOverride;
+    const netWorth = totalAssets - totalDebts;
+    if (Number.isFinite(netWorth)) setComputedNetWorth(netWorth);
+
+    const metrics = (payload.kpis ?? payload.latestSnapshot?.kpis ?? {}) as Record<string, any>;
+    const ef = Number(metrics?.ef_months);
+    const dti = Number(metrics?.dti_stock);
+    const nextUnlocks = new Set<string>();
+    if (Number.isFinite(ef) && ef >= 1) nextUnlocks.add('prosper-pots');
+    if (Number.isFinite(ef) && ef >= 3) {
+      nextUnlocks.add('emergency-fund-3m');
+      nextUnlocks.add('invest-automation');
+    }
+    if (Number.isFinite(ef) && ef >= 3 && (!Number.isFinite(dti) || dti < 0.3)) {
+      nextUnlocks.add('invest-long-term');
+    }
+    setUnlocked(nextUnlocks);
+  }, [applyServerField, setHasPartner, setHousing]);
+
+  const flushPendingChanges = React.useCallback(async () => {
+    if (!householdId) return;
+    if (isFlushingRef.current) return;
+    const dirtyKeys = Array.from(dirtyFieldsRef.current);
+    const housingDirty = housingDirtyRef.current;
+    const partnerDirty = partnerDirtyRef.current;
+    if (!dirtyKeys.length && !housingDirty && !partnerDirty) return;
+
+    const slots: Record<string, { value: SlotVal; confidence?: string }> = {};
+    const draftUpdate: Partial<Record<NumericFieldKey, number | undefined>> = {};
+    const updatedKeys: NumericFieldKey[] = [];
+    const invalidFields: string[] = [];
+    const currentValues = fieldValuesRef.current;
+
+    for (const key of dirtyKeys) {
+      const slotKey = FIELD_SLOT_MAP[key];
+      const currentRaw = (currentValues[key] ?? '').trim();
+      const serverRaw = (lastServerValuesRef.current[key] ?? '').trim();
+      if (currentRaw === serverRaw) {
+        continue;
+      }
+      if (!currentRaw.length) {
+        slots[slotKey] = { value: null, confidence: 'med' };
+        draftUpdate[key] = undefined;
+        updatedKeys.push(key);
+        continue;
+      }
+      const parsed = planeNumber(currentRaw);
+      if (parsed == null) {
+        invalidFields.push(FIELD_LABELS[key]);
+        continue;
+      }
+      slots[slotKey] = { value: parsed, confidence: 'med' };
+      draftUpdate[key] = parsed;
+      updatedKeys.push(key);
+    }
+
+    if (invalidFields.length) {
+      setError(`Please enter a number for ${invalidFields[0]}.`);
+      return;
+    }
+
+    if (partnerDirty) {
+      slots['partner'] = { value: hasPartnerRef.current, confidence: 'high' };
+    }
+    if (housingDirty) {
+      slots['housing_status'] = { value: housingRef.current, confidence: 'high' };
+    }
+
+    if (!Object.keys(slots).length) {
+      for (const key of dirtyKeys) {
+        const currentRaw = (currentValues[key] ?? '').trim();
+        if (currentRaw === (lastServerValuesRef.current[key] ?? '').trim()) {
+          dirtyFieldsRef.current.delete(key);
+        }
+      }
+      if (!partnerDirty) partnerDirtyRef.current = false;
+      if (!housingDirty) housingDirtyRef.current = false;
+      return;
+    }
+
+    isFlushingRef.current = true;
+    setAutoSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/prosper/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ householdId, slots }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        const nextId = await resetHousehold();
+        if (nextId && nextId !== householdId) setTimeout(() => { flushPendingChangesRef.current?.(); }, 400);
+        return;
+      }
+      if (res.status === 402) {
+        setError(json?.message || 'Free limit reached — please upgrade to save new data.');
+        return;
+      }
+      if (!res.ok || !json?.snapshot) {
+        setError(json?.error || 'Could not save your updates yet.');
+        return;
+      }
+      const snapshot = json.snapshot as DashboardSummary['latestSnapshot'];
+      const currentValuesPost = fieldValuesRef.current;
+      for (const key of updatedKeys) {
+        const currentRaw = (currentValuesPost[key] ?? '').trim();
+        lastServerValuesRef.current[key] = currentRaw;
+        dirtyFieldsRef.current.delete(key);
+      }
+      if (partnerDirty) partnerDirtyRef.current = false;
+      if (housingDirty) housingDirtyRef.current = false;
+      if (Object.keys(draftUpdate).length) {
+        updateDraftStore(draftUpdate as Partial<OnboardingDraft>);
+      }
+      const summaryForApply: DashboardSummary = {
+        latestSnapshot: snapshot,
+        kpis: snapshot?.kpis ?? null,
+        levels: snapshot?.levels ?? null,
+      };
+      if (json?.series) summaryForApply.series = json.series;
+      setDashboardData((prev) => {
+        const next: DashboardSummary = { ...(prev || {}) };
+        next.latestSnapshot = snapshot;
+        next.kpis = snapshot?.kpis ?? prev?.kpis ?? null;
+        next.levels = snapshot?.levels ?? prev?.levels ?? null;
+        if (json?.series) next.series = json.series;
+        return next;
+      });
+      applyDashboard(summaryForApply);
+    } catch {
+      setError('Something went wrong while saving.');
+    } finally {
+      isFlushingRef.current = false;
+      setAutoSaving(false);
+    }
+  }, [applyDashboard, householdId, updateDraftStore, resetHousehold]);
+
+  const flushPendingChangesRef = React.useRef<(() => void) | null>(null);
+  React.useEffect(() => { flushPendingChangesRef.current = flushPendingChanges; }, [flushPendingChanges]);
+
+  const scheduleAutoSave = React.useCallback(() => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = setTimeout(() => {
+      saveTimeoutRef.current = null;
+      flushPendingChangesRef.current?.();
+    }, 800);
+  }, [flushPendingChanges]);
+
+  const setField = React.useCallback((key: NumericFieldKey, next: string) => {
+    const currentValue = fieldValuesRef.current[key];
+    if (currentValue === next) return;
+    setFieldValues((prev) => (prev[key] === next ? prev : { ...prev, [key]: next }));
+    dirtyFieldsRef.current.add(key);
+    setError(null);
+    scheduleAutoSave();
+  }, [scheduleAutoSave]);
+
+  React.useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  const netIncomeSelf = fieldValues.netIncomeSelf;
+  const netIncomePartner = fieldValues.netIncomePartner;
+  const essentialExp = fieldValues.essentialExp;
+  const totalExpenses = fieldValues.totalExpenses;
+  const grossIncomeSelf = fieldValues.grossIncomeSelf;
+  const grossIncomePartner = fieldValues.grossIncomePartner;
+  const rent = fieldValues.rent;
+  const mortgagePmt = fieldValues.mortgagePmt;
+  const cash = fieldValues.cash;
+  const emergencySavings = fieldValues.emergencySavings;
+  const termDeposits = fieldValues.termDeposits;
+  const investmentsTotal = fieldValues.investmentsTotal;
+  const pensionTotal = fieldValues.pensionTotal;
+  const homeValue = fieldValues.homeValue;
+  const mortgageBalance = fieldValues.mortgageBalance;
+  const housingRunningCosts = fieldValues.housingRunningCosts;
+  const debtPmts = fieldValues.debtPmts;
+  const debtTotal = fieldValues.debtTotal;
+  const shortTermLiabilities = fieldValues.shortTermLiabilities;
+  const assetsTotal = fieldValues.assetsTotal;
+  const liabilitiesTotal = fieldValues.liabilitiesTotal;
+
+  const localNetWorth = React.useMemo(() => {
+    const parse = (val: string) => planeNumber(val) ?? 0;
+    const overrideAssets = planeNumber(assetsTotal);
+    const overrideDebts = planeNumber(liabilitiesTotal);
+    let assets = parse(cash)
+      + parse(emergencySavings)
+      + parse(termDeposits)
+      + parse(investmentsTotal)
+      + parse(pensionTotal)
+      + parse(homeValue);
+    let debts = parse(mortgageBalance)
+      + parse(debtTotal)
+      + parse(shortTermLiabilities);
+    if (overrideAssets != null && !Number.isNaN(overrideAssets)) assets = overrideAssets;
+    if (overrideDebts != null && !Number.isNaN(overrideDebts)) debts = overrideDebts;
+    const net = assets - debts;
+    return Number.isFinite(net) ? net : null;
+  }, [cash, emergencySavings, termDeposits, investmentsTotal, pensionTotal, homeValue, mortgageBalance, debtTotal, shortTermLiabilities, assetsTotal, liabilitiesTotal]);
 
   const kpis = React.useMemo(() => {
     const base = dashboardData?.kpis ?? dashboardData?.latestSnapshot?.kpis ?? {};
@@ -218,9 +619,11 @@ export default function SimpleWorkspace() {
       const val = Number(trendPoints[trendPoints.length - 1].value);
       return Number.isFinite(val) ? val : null;
     }
+    if (computedNetWorth != null) return computedNetWorth;
+    if (localNetWorth != null) return localNetWorth;
     const fallback = Number((kpis as any)?.net_worth);
     return Number.isFinite(fallback) ? fallback : null;
-  }, [trendPoints, kpis]);
+  }, [trendPoints, kpis, computedNetWorth, localNetWorth]);
 
   const prevNetWorth = React.useMemo(() => {
     if (trendPoints.length > 1) {
@@ -354,70 +757,20 @@ export default function SimpleWorkspace() {
     return entries.slice(0, 3);
   }, [healthMetrics, netWorthGrowthPct, formatPctDelta]);
 
-  const applyDashboard = React.useCallback((payload: DashboardSummary | null) => {
-    if (!payload) return;
-    const latest = payload.latestSnapshot ?? null;
-    const slots = ((latest?.inputs?.slots || {}) as Record<string, any>) || {};
-    const slotValue = (key: string) => {
-      const raw = slots?.[key];
-      if (raw && typeof raw === 'object' && 'value' in raw) return raw.value;
-      return raw;
-    };
-    const toNum = (v: any) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : undefined;
-    };
-    const updateIfEmpty = (setter: React.Dispatch<React.SetStateAction<string>>, next?: number) => {
-      if (typeof next !== 'number') return;
-      setter((cur) => (cur === '' ? String(next) : cur));
-    };
-    const partnerVal = slotValue('partner');
-    if (partnerVal != null) {
-      const bool = typeof partnerVal === 'boolean' ? partnerVal : partnerVal === 'true' || partnerVal === '1' || partnerVal === 1;
-      setHasPartner(Boolean(bool));
-    }
-    const housingVal = slotValue('housing_status');
-    if (housingVal === 'rent' || housingVal === 'own' || housingVal === 'other') {
-      setHousing(housingVal);
-    }
-    updateIfEmpty(setNetIncomeSelf, toNum(slotValue('net_income_monthly_self')));
-    updateIfEmpty(setNetIncomePartner, toNum(slotValue('net_income_monthly_partner')));
-    updateIfEmpty(setEssentialExp, toNum(slotValue('essential_expenses_monthly')));
-    if (housingVal === 'rent') {
-      updateIfEmpty(setRent, toNum(slotValue('rent_monthly')));
-    }
-    if (housingVal === 'own') {
-      updateIfEmpty(setMortgagePmt, toNum(slotValue('mortgage_payment_monthly')));
-    }
-    updateIfEmpty(setCash, toNum(slotValue('cash_liquid_total')));
-    updateIfEmpty(setDebtPmts, toNum(slotValue('other_debt_payments_monthly_total')));
-    updateIfEmpty(setDebtTotal, toNum(slotValue('other_debt_balances_total')));
-
-    const metrics = (payload.kpis ?? payload.latestSnapshot?.kpis ?? {}) as Record<string, any>;
-    const ef = Number(metrics?.ef_months);
-    const dti = Number(metrics?.dti_stock);
-    const nextUnlocks = new Set<string>();
-    if (Number.isFinite(ef) && ef >= 1) nextUnlocks.add('prosper-pots');
-    if (Number.isFinite(ef) && ef >= 3) {
-      nextUnlocks.add('emergency-fund-3m');
-      nextUnlocks.add('invest-automation');
-    }
-    if (Number.isFinite(ef) && ef >= 3 && (!Number.isFinite(dti) || dti < 0.3)) {
-      nextUnlocks.add('invest-long-term');
-    }
-    setUnlocked(nextUnlocks);
-  }, [setNetIncomeSelf, setNetIncomePartner, setEssentialExp, setRent, setMortgagePmt, setCash, setDebtPmts, setDebtTotal, setHasPartner, setHousing]);
-
   const fetchDashboard = React.useCallback(async () => {
     if (!householdId) return;
     try {
       const res = await fetch(`/api/prosper/dashboard?householdId=${encodeURIComponent(householdId)}`, { cache: 'no-store' });
+      if (res.status === 401) {
+        const nextId = await resetHousehold();
+        if (nextId !== householdId) return;
+      }
       if (!res.ok) return;
       const json = (await res.json()) as DashboardSummary;
       setDashboardData(json);
       applyDashboard(json);
     } catch {}
-  }, [householdId, applyDashboard]);
+  }, [householdId, applyDashboard, resetHousehold]);
 
   React.useEffect(() => {
     if (!householdId) return;
@@ -555,16 +908,14 @@ export default function SimpleWorkspace() {
   };
   React.useEffect(() => { log('simple_enter'); }, []);
 
-  const planeNumber = (v: string): number | null => {
-    const n = Number((v || '').replace(/[,\s]/g, ''));
-    return Number.isFinite(n) ? n : null;
-  };
-
   type PlanTile = { id: string; title: string; blurb: string; gated?: boolean; recommended?: boolean; reason?: string };
   const planTiles: PlanTile[] = React.useMemo(() => {
     const tiles: PlanTile[] = [];
     const debtTotalNum = planeNumber(debtTotal) || 0;
-    const cashNum = planeNumber(cash) || 0;
+    const baseCash = planeNumber(cash) || 0;
+    const emergencyNum = planeNumber(emergencySavings) || 0;
+    const termNum = planeNumber(termDeposits) || 0;
+    const cashNum = baseCash + emergencyNum + termNum;
     const incomeNum = planeNumber(netIncomeSelf) || 0;
     const partnerIncomeNum = hasPartner ? (planeNumber(netIncomePartner) || 0) : 0;
     const essentialsNum = planeNumber(essentialExp) || 0;
@@ -644,6 +995,7 @@ export default function SimpleWorkspace() {
   };
 
   const buildPlan = async () => {
+    await flushPendingChanges();
     setSaving(true); setError(null);
     try {
       const slots: Record<string, { value: SlotVal; confidence?: string }> = {};
@@ -662,12 +1014,25 @@ export default function SimpleWorkspace() {
       const selfInc = toNum(netIncomeSelf); if (selfInc != null) slots['net_income_monthly_self'] = { value: selfInc };
       const partnerInc = toNum(netIncomePartner); if (hasPartner && partnerInc != null) slots['net_income_monthly_partner'] = { value: partnerInc };
       const ess = toNum(essentialExp); if (ess != null) slots['essential_expenses_monthly'] = { value: ess };
+      const totalExp = toNum(totalExpenses); if (totalExp != null) slots['total_expenses_monthly'] = { value: totalExp };
+      const grossSelf = toNum(grossIncomeSelf); if (grossSelf != null) slots['gross_income_annual_self'] = { value: grossSelf };
+      const grossPartner = toNum(grossIncomePartner); if (hasPartner && grossPartner != null) slots['gross_income_annual_partner'] = { value: grossPartner };
       slots['housing_status'] = { value: housing };
       const r = toNum(rent); if (housing === 'rent' && r != null) slots['rent_monthly'] = { value: r };
       const m = toNum(mortgagePmt); if (housing === 'own' && m != null) slots['mortgage_payment_monthly'] = { value: m };
+      const running = toNum(housingRunningCosts); if (running != null) slots['housing_running_costs_monthly'] = { value: running };
       const c = toNum(cash); if (c != null) slots['cash_liquid_total'] = { value: c };
+      const emergency = toNum(emergencySavings); if (emergency != null) slots['emergency_savings_liquid'] = { value: emergency };
+      const term = toNum(termDeposits); if (term != null) slots['term_deposits_le_3m'] = { value: term };
+      const invest = toNum(investmentsTotal); if (invest != null) slots['investments_ex_home_total'] = { value: invest };
+      const pension = toNum(pensionTotal); if (pension != null) slots['pension_balance_total'] = { value: pension };
+      const home = toNum(homeValue); if (home != null) slots['home_value'] = { value: home };
+      const mortBal = toNum(mortgageBalance); if (mortBal != null) slots['mortgage_balance'] = { value: mortBal };
       const dpm = toNum(debtPmts); if (dpm != null) slots['other_debt_payments_monthly_total'] = { value: dpm };
       const dt = toNum(debtTotal); if (dt != null) slots['other_debt_balances_total'] = { value: dt };
+      const shortTerm = toNum(shortTermLiabilities); if (shortTerm != null) slots['short_term_liabilities_12m'] = { value: shortTerm };
+      const assets = toNum(assetsTotal); if (assets != null) slots['assets_total'] = { value: assets };
+      const liabilities = toNum(liabilitiesTotal); if (liabilities != null) slots['debts_total'] = { value: liabilities };
 
       const res = await fetch('/api/prosper/snapshots', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -778,18 +1143,15 @@ export default function SimpleWorkspace() {
   // Prefill from voice onboarding draft
   React.useEffect(() => {
     if (!draft) return;
-    const setIfEmpty = (cur: string, next?: number) => (cur === '' && typeof next === 'number' ? String(next) : cur);
     setHasPartner((prev) => prev || !!persona.partner);
-    setNetIncomeSelf((cur) => setIfEmpty(cur, draft.netIncomeSelf));
-    setNetIncomePartner((cur) => setIfEmpty(cur, draft.netIncomePartner));
-    setEssentialExp((cur) => setIfEmpty(cur, draft.essentialExp));
-    setCash((cur) => setIfEmpty(cur, draft.cash));
-    setDebtPmts((cur) => setIfEmpty(cur, draft.debtPmts));
-    setDebtTotal((cur) => setIfEmpty(cur, draft.debtTotal));
-    if (draft.housing && housing === 'rent' && draft.housing !== 'rent') setHousing(draft.housing);
-    if (draft.housing === 'rent') setRent((cur) => setIfEmpty(cur, draft.rent));
-    if (draft.housing === 'own') setMortgagePmt((cur) => setIfEmpty(cur, draft.mortgagePmt));
-  }, [draft?.netIncomeSelf, draft?.netIncomePartner, draft?.essentialExp, draft?.cash, draft?.debtPmts, draft?.debtTotal, draft?.housing, draft?.rent, draft?.mortgagePmt, persona.partner]);
+    for (const key of NUMERIC_FIELD_KEYS) {
+      const maybeValue = (draft as any)[key];
+      if (typeof maybeValue === 'number') {
+        applyServerField(key, maybeValue);
+      }
+    }
+    if (draft.housing === 'rent' || draft.housing === 'own' || draft.housing === 'other') setHousing(draft.housing);
+  }, [draft, applyServerField, persona.partner]);
 
   React.useEffect(() => {
     if (typeof persona.partner === 'boolean') setHasPartner(persona.partner);
@@ -800,33 +1162,43 @@ export default function SimpleWorkspace() {
     const handler = (e: any) => {
       try {
         const slots = (e?.detail?.slots || {}) as Record<string, any>;
-        const val = (k: string) => {
-          const v = slots?.[k]?.value;
-          const n = Number(v);
-          return Number.isFinite(n) ? String(n) : '';
-        };
-        if (!netIncomeSelf) setNetIncomeSelf(val('net_income_monthly_self'));
-        if (hasPartner && !netIncomePartner) setNetIncomePartner(val('net_income_monthly_partner'));
-        if (!essentialExp) setEssentialExp(val('essential_expenses_monthly'));
+        for (const [slotKey, payload] of Object.entries(slots)) {
+          if (!payload) continue;
+          const fieldKey = SLOT_TO_FIELD[slotKey];
+          if (!fieldKey) continue;
+          const raw = typeof payload === 'object' && 'value' in payload ? (payload as any).value : payload;
+          if (raw == null || raw === '') continue;
+          const numeric = Number(raw);
+          const value = Number.isFinite(numeric) ? numeric : raw;
+          applyServerField(fieldKey, value);
+        }
         const hs = slots?.housing_status?.value as any;
         if ((hs === 'rent' || hs === 'own' || hs === 'other') && housing !== hs) setHousing(hs);
-        if (!rent && housing === 'rent') setRent(val('rent_monthly'));
-        if (!mortgagePmt && housing === 'own') setMortgagePmt(val('mortgage_payment_monthly'));
-        if (!cash) setCash(val('cash_liquid_total'));
-        if (!debtPmts) setDebtPmts(val('other_debt_payments_monthly_total'));
-        if (!debtTotal) setDebtTotal(val('other_debt_balances_total'));
       } catch {}
     };
     window.addEventListener('pp:onboarding_profile', handler as any);
     return () => window.removeEventListener('pp:onboarding_profile', handler as any);
-  }, [netIncomeSelf, netIncomePartner, essentialExp, rent, mortgagePmt, cash, debtPmts, debtTotal, housing, hasPartner]);
+  }, [applyServerField, housing, setHousing]);
 
   return (
-    <div className="relative z-10 min-h-[100svh] w-full">
+    <div className="relative min-h-[100svh] w-full overflow-hidden bg-[#041613]">
+      <div className="absolute inset-0 -z-20 overflow-hidden">
+        <BackgroundVideo
+          src="/landing.mp4"
+          className="absolute inset-0 h-full w-full object-cover blur-[6px] scale-[1.06] opacity-75"
+        />
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: 'radial-gradient(1200px 600px at 50% 40%, rgba(255,255,255,0.12), transparent 65%)' }}
+        />
+      </div>
+      <div className="absolute inset-0 -z-10 bg-black/55" aria-hidden />
+
+      <div className="relative z-10 min-h-[100svh] w-full">
       <header className="absolute top-6 left-6 right-6 z-20">
         <div className="mx-auto max-w-[1040px] px-0 flex items-center justify-between">
           <Link href="/" className="inline-flex items-center gap-3">
-            <img src="/prosper_wordmark_offwhite.svg" alt="Prosper" className="h-10 w-auto opacity-95" />
+            <Image src="/prosper_wordmark_offwhite.svg" alt="Prosper" width={160} height={40} className="h-10 w-auto opacity-95" priority />
             <span className="sr-only">Prosper</span>
           </Link>
           <PersonaBanner />
@@ -1080,8 +1452,9 @@ export default function SimpleWorkspace() {
 
                 {activeTab === 'data' && (
                   <div className="space-y-6">
-                    <div className="text-xs text-white/70">
-                      These numbers update instantly in your Plan and Health tabs.
+                    <div className="flex items-center justify-between text-xs text-white/70 gap-3">
+                      <span>These numbers update instantly in your Plan and Health tabs.</span>
+                      {autoSaving && <span className="text-white/60">Saving…</span>}
                     </div>
 
                     <DataSection title="Personal details" description="These are prefetched from your conversations. Update anything that has changed.">
@@ -1104,8 +1477,30 @@ export default function SimpleWorkspace() {
                         </Field>
                         <Field label="Household status">
                           <div className="flex items-center gap-3 text-sm">
-                            <button onClick={() => { updatePersona({ partner: false }); setHasPartner(false); }} className={`btn ${!hasPartner ? 'btn-active' : ''}`}>Solo</button>
-                            <button onClick={() => { updatePersona({ partner: true }); setHasPartner(true); }} className={`btn ${hasPartner ? 'btn-active' : ''}`}>With partner</button>
+                            <button
+                              onClick={() => {
+                                updatePersona({ partner: false });
+                                setHasPartner(false);
+                                partnerDirtyRef.current = true;
+                                setField('netIncomePartner', '');
+                                setField('grossIncomePartner', '');
+                                scheduleAutoSave();
+                              }}
+                              className={`btn ${!hasPartner ? 'btn-active' : ''}`}
+                            >
+                              Solo
+                            </button>
+                            <button
+                              onClick={() => {
+                                updatePersona({ partner: true });
+                                setHasPartner(true);
+                                partnerDirtyRef.current = true;
+                                scheduleAutoSave();
+                              }}
+                              className={`btn ${hasPartner ? 'btn-active' : ''}`}
+                            >
+                              With partner
+                            </button>
                           </div>
                         </Field>
                         <Field label="Children">
@@ -1127,46 +1522,124 @@ export default function SimpleWorkspace() {
                     <DataSection title="Income & expenses" description="These power your Money Snapshot.">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Field label="Net income (you)" suffix="/mo">
-                          <input value={netIncomeSelf} onChange={(e) => setNetIncomeSelf(e.target.value)} placeholder="e.g., 3200" className="field" />
+                          <input value={netIncomeSelf} onChange={(e) => setField('netIncomeSelf', e.target.value)} placeholder="e.g., 3200" className="field" />
+                        </Field>
+                        <Field label="Gross income (you)" suffix="/yr">
+                          <input value={grossIncomeSelf} onChange={(e) => setField('grossIncomeSelf', e.target.value)} placeholder="e.g., 52000" className="field" />
                         </Field>
                         <Field label="Essential expenses" suffix="/mo">
-                          <input value={essentialExp} onChange={(e) => setEssentialExp(e.target.value)} placeholder="e.g., 1800" className="field" />
+                          <input value={essentialExp} onChange={(e) => setField('essentialExp', e.target.value)} placeholder="e.g., 1800" className="field" />
+                        </Field>
+                        <Field label="Total expenses" suffix="/mo">
+                          <input value={totalExpenses} onChange={(e) => setField('totalExpenses', e.target.value)} placeholder="e.g., 2600" className="field" />
                         </Field>
                         {hasPartner && (
                           <Field label="Net income (partner)" suffix="/mo">
-                            <input value={netIncomePartner} onChange={(e) => setNetIncomePartner(e.target.value)} placeholder="e.g., 2600" className="field" />
+                            <input value={netIncomePartner} onChange={(e) => setField('netIncomePartner', e.target.value)} placeholder="e.g., 2600" className="field" />
+                          </Field>
+                        )}
+                        {hasPartner && (
+                          <Field label="Gross income (partner)" suffix="/yr">
+                            <input value={grossIncomePartner} onChange={(e) => setField('grossIncomePartner', e.target.value)} placeholder="e.g., 48000" className="field" />
                           </Field>
                         )}
                         <Field label="Housing">
                           <div className="flex items-center gap-3 text-sm">
-                            <button onClick={() => setHousing('rent')} className={`btn ${housing === 'rent' ? 'btn-active' : ''}`}>Rent</button>
-                            <button onClick={() => setHousing('own')} className={`btn ${housing === 'own' ? 'btn-active' : ''}`}>Own</button>
-                            <button onClick={() => setHousing('other')} className={`btn ${housing === 'other' ? 'btn-active' : ''}`}>Other</button>
+                            <button
+                              onClick={() => {
+                                housingDirtyRef.current = true;
+                                if (housing !== 'rent') {
+                                  setField('mortgagePmt', '');
+                                }
+                                setHousing('rent');
+                                scheduleAutoSave();
+                              }}
+                              className={`btn ${housing === 'rent' ? 'btn-active' : ''}`}
+                            >
+                              Rent
+                            </button>
+                            <button
+                              onClick={() => {
+                                housingDirtyRef.current = true;
+                                if (housing !== 'own') {
+                                  setField('rent', '');
+                                }
+                                setHousing('own');
+                                scheduleAutoSave();
+                              }}
+                              className={`btn ${housing === 'own' ? 'btn-active' : ''}`}
+                            >
+                              Own
+                            </button>
+                            <button
+                              onClick={() => {
+                                housingDirtyRef.current = true;
+                                if (housing !== 'other') {
+                                  setField('rent', '');
+                                  setField('mortgagePmt', '');
+                                }
+                                setHousing('other');
+                                scheduleAutoSave();
+                              }}
+                              className={`btn ${housing === 'other' ? 'btn-active' : ''}`}
+                            >
+                              Other
+                            </button>
                           </div>
                         </Field>
                         {housing === 'rent' && (
                           <Field label="Rent" suffix="/mo">
-                            <input value={rent} onChange={(e) => setRent(e.target.value)} placeholder="e.g., 1200" className="field" />
+                            <input value={rent} onChange={(e) => setField('rent', e.target.value)} placeholder="e.g., 1200" className="field" />
                           </Field>
                         )}
                         {housing === 'own' && (
                           <Field label="Mortgage payment" suffix="/mo">
-                            <input value={mortgagePmt} onChange={(e) => setMortgagePmt(e.target.value)} placeholder="e.g., 1100" className="field" />
+                            <input value={mortgagePmt} onChange={(e) => setField('mortgagePmt', e.target.value)} placeholder="e.g., 1100" className="field" />
                           </Field>
                         )}
+                        <Field label="Housing running costs" suffix="/mo">
+                          <input value={housingRunningCosts} onChange={(e) => setField('housingRunningCosts', e.target.value)} placeholder="e.g., 180" className="field" />
+                        </Field>
                       </div>
                     </DataSection>
 
                     <DataSection title="Assets & liabilities" description="We use these to gauge buffers and debt pressure.">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Field label="Cash on hand">
-                          <input value={cash} onChange={(e) => setCash(e.target.value)} placeholder="e.g., 2400" className="field" />
+                          <input value={cash} onChange={(e) => setField('cash', e.target.value)} placeholder="e.g., 2400" className="field" />
+                        </Field>
+                        <Field label="Emergency savings">
+                          <input value={emergencySavings} onChange={(e) => setField('emergencySavings', e.target.value)} placeholder="e.g., 1500" className="field" />
+                        </Field>
+                        <Field label="Term deposits (≤3m)">
+                          <input value={termDeposits} onChange={(e) => setField('termDeposits', e.target.value)} placeholder="e.g., 1000" className="field" />
+                        </Field>
+                        <Field label="Investments (ex home)">
+                          <input value={investmentsTotal} onChange={(e) => setField('investmentsTotal', e.target.value)} placeholder="e.g., 6200" className="field" />
+                        </Field>
+                        <Field label="Pension balance">
+                          <input value={pensionTotal} onChange={(e) => setField('pensionTotal', e.target.value)} placeholder="e.g., 18000" className="field" />
+                        </Field>
+                        <Field label="Home value">
+                          <input value={homeValue} onChange={(e) => setField('homeValue', e.target.value)} placeholder="e.g., 325000" className="field" />
+                        </Field>
+                        <Field label="Mortgage balance">
+                          <input value={mortgageBalance} onChange={(e) => setField('mortgageBalance', e.target.value)} placeholder="e.g., 210000" className="field" />
                         </Field>
                         <Field label="Debt payments (total)" suffix="/mo">
-                          <input value={debtPmts} onChange={(e) => setDebtPmts(e.target.value)} placeholder="e.g., 250" className="field" />
+                          <input value={debtPmts} onChange={(e) => setField('debtPmts', e.target.value)} placeholder="e.g., 250" className="field" />
                         </Field>
                         <Field label="Debts total">
-                          <input value={debtTotal} onChange={(e) => setDebtTotal(e.target.value)} placeholder="e.g., 3800" className="field" />
+                          <input value={debtTotal} onChange={(e) => setField('debtTotal', e.target.value)} placeholder="e.g., 3800" className="field" />
+                        </Field>
+                        <Field label="Short-term liabilities (12m)">
+                          <input value={shortTermLiabilities} onChange={(e) => setField('shortTermLiabilities', e.target.value)} placeholder="e.g., 500" className="field" />
+                        </Field>
+                        <Field label="Total assets">
+                          <input value={assetsTotal} onChange={(e) => setField('assetsTotal', e.target.value)} placeholder="Optional override" className="field" />
+                        </Field>
+                        <Field label="Total debts">
+                          <input value={liabilitiesTotal} onChange={(e) => setField('liabilitiesTotal', e.target.value)} placeholder="Optional override" className="field" />
                         </Field>
                       </div>
                     </DataSection>
@@ -1289,6 +1762,7 @@ export default function SimpleWorkspace() {
         <Link href="/app" className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm text-white/90 hover:bg-white/20">Open full app</Link>
       </div>
       {/* Styles moved to globals.css: .field, .btn, .btn-active, focus-visible ring */}
+    </div>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import WaitlistForm from "@/app/components/WaitlistForm";
 import BackgroundVideo from "@/app/components/BackgroundVideo";
 import ScarcityCounter from "@/app/components/ScarcityCounter";
@@ -31,7 +32,7 @@ export default function Page() {
       {/* Logo top-left */}
       <header className="absolute top-6 left-6 z-20">
         <Link href="/waitlist" className="inline-flex items-center gap-3">
-          <img src="/prosper_wordmark_offwhite.svg" alt="Prosper wordmark" className="h-10 md:h-12 w-auto opacity-95" />
+          <Image src="/prosper_wordmark_offwhite.svg" alt="Prosper wordmark" width={200} height={60} className="h-10 md:h-12 w-auto opacity-95" priority />
           <span className="sr-only">Prosper</span>
         </Link>
       </header>
@@ -57,7 +58,7 @@ export default function Page() {
       <section className="relative z-20 flex h-full items-center justify-center">
         <div className="w-full max-w-[1120px] px-6">
           <div className="flex flex-col items-center text-center gap-6 md:gap-8">
-            <img src="/2D76K394.eps.svg" alt="" aria-hidden className="h-8 w-8 md:h-9 md:w-9 opacity-95" />
+            <Image src="/favicon.png" alt="" aria-hidden width={32} height={32} className="h-7 w-7 md:h-8 md:w-8 opacity-95 rounded-sm" />
             <h1 className="text-4xl font-semibold tracking-tight md:text-6xl md:leading-tight">
               Your personal money coach
             </h1>

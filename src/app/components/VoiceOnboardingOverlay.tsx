@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { SessionStatus } from "@/app/types";
+import Image from "next/image";
 import { ensureHouseholdId } from "@/app/lib/householdLocal";
 import { useOnboardingStore } from "@/app/state/onboarding";
 
@@ -16,7 +16,6 @@ export type VoiceOnboardingPhase =
 type Props = {
   visible: boolean;
   phase: VoiceOnboardingPhase;
-  status: SessionStatus;
   error?: string | null;
   onSkip: () => void;
   segments?: Array<{ speaker: 'assistant' | 'user'; text: string }>;
@@ -113,7 +112,7 @@ function TypewriterText({ text, className }: { text: string; className?: string 
   );
 }
 
-export default function VoiceOnboardingOverlay({ visible, phase, status, error, onSkip, segments, greetingName, onToggleVoice, voiceEnabled }: Props) {
+export default function VoiceOnboardingOverlay({ visible, phase, error, onSkip, segments, greetingName, onToggleVoice, voiceEnabled }: Props) {
   const copy = phaseCopy[phase];
   const heading = greetingName ? `Hey ${greetingName}` : "Hey there...";
   const persona = useOnboardingStore((s) => s.persona);
@@ -167,7 +166,7 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
       />
       <div className="absolute inset-0 bg-[#041613]/70" />
       <div className="relative z-10 flex min-h-full flex-col items-center justify-center gap-6 md:gap-8 px-6 text-center text-[#EFEEEB]">
-        <img src="/prosper_wordmark_offwhite.svg" alt="Prosper" className="h-12 w-auto md:h-14" />
+        <Image src="/prosper_wordmark_offwhite.svg" alt="Prosper" width={176} height={56} className="h-12 w-auto md:h-14" priority />
         {/* Persona summary: subtle, updates live as we capture fields */}
         {chips.length > 0 && (
           <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] md:text-xs text-[#EFEEEB]/80">
@@ -184,7 +183,7 @@ export default function VoiceOnboardingOverlay({ visible, phase, status, error, 
           </h2>
           {phase === 'requesting' && (
             <p className="text-base md:text-lg text-[#EFEEEB]/80">
-              If you're able to talk, please allow your mic.
+              If you&rsquo;re able to talk, please allow your mic.
             </p>
           )}
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { RealtimeAgent, RealtimeItem, tool } from "@openai/agents/realtime";
+import { RealtimeAgent, tool } from "@openai/agents/realtime";
 import { computeKpisV2 } from "@/app/lib/kpiEngine";
 import { assignLevelsV2 } from "@/app/lib/levelEngine";
 import { generateTwoBestActions } from "@/app/lib/recommendationsV2";
@@ -27,7 +27,7 @@ export async function getHouseholdIdClient(): Promise<string> {
   return id;
 }
 
-async function getAuthHeader(): Promise<Record<string, string> | {}> {
+async function getAuthHeader(): Promise<Record<string, string>> {
   try {
     const supaMod = await import('@/app/lib/supabaseClient');
     const supa = (supaMod as any).getSupabaseClient?.();
@@ -103,7 +103,7 @@ export const rehydrate = tool({
         }
         return { ok: true, householdId: hh, exists: !!snap, entitlements: d?.entitlements || null };
       }
-    } catch (e) {
+    } catch {
       return { ok: false };
     }
     return { ok: false };
@@ -351,7 +351,9 @@ export const assign_levels = tool({
           if (res.ok) {
             state.lastPersistFingerprint = fingerprint;
             try { window.dispatchEvent(new CustomEvent('pp:snapshot_saved', { detail: { autosave: true } })); } catch {}
-            try { addBreadcrumb && addBreadcrumb('Saving your details…'); } catch {}
+            try {
+              if (addBreadcrumb) addBreadcrumb('Saving your details…');
+            } catch {}
           }
         }
       }
@@ -403,7 +405,9 @@ export const map_triggers = tool({
           if (res.ok) {
             state.lastPersistFingerprint = fingerprint;
             try { window.dispatchEvent(new CustomEvent('pp:snapshot_saved', { detail: { autosave: true } })); } catch {}
-            try { addBreadcrumb && addBreadcrumb('Saving your details…'); } catch {}
+            try {
+              if (addBreadcrumb) addBreadcrumb('Saving your details…');
+            } catch {}
           }
         }
       }
@@ -507,7 +511,7 @@ export const persist_snapshot = tool({
       if (!res.ok) return { ok: false, error: json };
       try { window.dispatchEvent(new CustomEvent('pp:snapshot_saved', { detail: { id: json?.id, created_at: json?.created_at } })); } catch {}
       return { ok: true, id: json?.id };
-    } catch (e) {
+    } catch {
       return { ok: false };
     }
   },
@@ -524,7 +528,7 @@ export const store_user_profile = tool({
     required: ["updates"],
     additionalProperties: false,
   },
-  execute: async (input: any, _details?: any) => {
+  execute: async (input: any) => {
     try {
       const hh = await getHouseholdIdClient();
       const { email, full_name } = input.updates || {};

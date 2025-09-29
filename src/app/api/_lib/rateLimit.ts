@@ -46,7 +46,7 @@ function getClientIp(req: NextRequest): string {
   if (xri) return xri.trim();
   try {
     // next/server may expose ip on request
-    // @ts-ignore
+    // @ts-expect-error - property exists in edge runtime
     if (req.ip) return String(req.ip);
   } catch {}
   return '0.0.0.0';

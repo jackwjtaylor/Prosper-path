@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function HomePage() {
   return (
@@ -7,7 +8,7 @@ export default function HomePage() {
       <header className="sticky top-0 z-40 backdrop-blur bg-card border-b border-border">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link href="/home" className="flex items-center gap-2 text-sm font-semibold">
-            <img src="/2D76K394.eps.svg" alt="Prosper Logo" className="h-6 w-6" />
+            <Image src="/favicon.png" alt="Prosper" width={24} height={24} className="h-6 w-6 rounded-sm" />
             Prosper
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm text-gray-700">

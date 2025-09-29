@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import BackgroundVideo from "@/app/components/BackgroundVideo";
 
 export const metadata = {
@@ -37,7 +38,7 @@ export default function Page() {
     <main className="relative h-[100svh] w-screen overflow-hidden bg-bg text-fg">
       <header className="absolute top-6 left-6 z-20">
         <Link href="/waitlist" className="inline-flex items-center gap-3">
-          <img src="/prosper_wordmark_offwhite.svg" alt="Prosper wordmark" className="h-10 md:h-12 w-auto opacity-95" />
+          <Image src="/prosper_wordmark_offwhite.svg" alt="Prosper wordmark" width={200} height={60} className="h-10 md:h-12 w-auto opacity-95" priority />
           <span className="sr-only">Prosper</span>
         </Link>
       </header>
@@ -63,7 +64,7 @@ export default function Page() {
               Your personal money coach
             </h1>
             <p className="text-dim text-lg md:text-xl md:text-balance max-w-[680px]">
-              Get a clear plan to grow your wealth, just by having a simple conversation
+              Get a step-by-step plan to build long term wealth
             </p>
             <div className="flex w-full max-w-[360px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-center">
               <Link

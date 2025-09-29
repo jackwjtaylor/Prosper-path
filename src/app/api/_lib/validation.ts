@@ -7,7 +7,7 @@ function zodIssues(err: ZodError) {
   return err.errors.map((e) => ({ path: e.path.join('.'), message: e.message }));
 }
 
-export async function parseJson<T>(req: NextRequest, schema: ZodTypeAny): Promise<
+export async function parseJson(req: NextRequest, schema: ZodTypeAny): Promise<
   | { ok: true; data: any }
   | { ok: false; res: NextResponse }
 > {
@@ -30,7 +30,7 @@ export async function parseJson<T>(req: NextRequest, schema: ZodTypeAny): Promis
   return { ok: true, data: result.data };
 }
 
-export function parseQuery<T>(req: NextRequest, schema: ZodTypeAny):
+export function parseQuery(req: NextRequest, schema: ZodTypeAny):
   | { ok: true; data: any }
   | { ok: false; res: NextResponse } {
   const url = new URL(req.url);

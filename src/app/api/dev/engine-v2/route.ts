@@ -128,7 +128,6 @@ export async function GET(req: NextRequest) {
   }
   const q = parseQuery(req, z.object({ scenario: z.string().optional(), validate: z.string().optional() }));
   if (!('ok' in q) || !q.ok) return q.res;
-  const url = new URL(req.url);
   const name = ((q.data.scenario || 'A') as string).toUpperCase();
   const validate = q.data.validate;
 

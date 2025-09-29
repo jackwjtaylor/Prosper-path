@@ -9,9 +9,11 @@ type Props = {
 };
 
 export default function BackgroundVideo({ src, webmSrc, poster, className = "absolute inset-0 h-full w-full object-cover" }: Props) {
+  const hasVideo = Boolean(src || webmSrc);
   const ref = React.useRef<HTMLVideoElement>(null);
 
   React.useEffect(() => {
+    if (!hasVideo) return;
     const v = ref.current;
     if (!v) return;
     const onEnded = () => {
@@ -29,7 +31,9 @@ export default function BackgroundVideo({ src, webmSrc, poster, className = "abs
     const id = setInterval(ensure, 3000);
     ensure();
     return () => { v.removeEventListener('ended', onEnded); clearInterval(id); };
-  }, []);
+  }, [hasVideo]);
+
+  if (!hasVideo) return null;
 
   return (
     <video

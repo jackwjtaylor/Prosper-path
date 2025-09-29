@@ -8,7 +8,7 @@ const BodySchema = z.object({ householdId: z.string().uuid() });
 export const POST = withHouseholdAccess<z.infer<typeof BodySchema>>(
   BodySchema,
   'json',
-  async ({ data, householdId }) => {
+  async ({ householdId }) => {
     // Delete dependent rows (best-effort order to avoid FK constraints if any)
     try { await supabase.from('net_worth_points').delete().eq('household_id', householdId); } catch {}
     try { await supabase.from('snapshots').delete().eq('household_id', householdId); } catch {}

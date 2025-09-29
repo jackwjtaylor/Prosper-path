@@ -20,8 +20,8 @@ export default function Sparkline({ points, forecast = [], size = 'md', showAxis
   const chartH = h - axisH;
   const plotW = w - axisW;
 
-  const { d, areaD, dForecast, ticks, yTicks, minYp, maxYp } = React.useMemo(() => {
-    if (!points || points.length === 0) return { d: "", areaD: "", dForecast: "", ticks: [] as Array<{ x: number; label: string }>, yTicks: [] as Array<{ y: number; v: number }>, minYp: 0, maxYp: 1 };
+  const { d, areaD, dForecast, ticks, yTicks } = React.useMemo(() => {
+    if (!points || points.length === 0) return { d: "", areaD: "", dForecast: "", ticks: [] as Array<{ x: number; label: string }>, yTicks: [] as Array<{ y: number; v: number }> };
 
     const all = [...points, ...forecast];
     const hasTs = all.some(p => p.ts);
@@ -34,8 +34,8 @@ export default function Sparkline({ points, forecast = [], size = 'md', showAxis
 
     const minX = Math.min(...(hasTs ? [...xs, ...xf] : xs));
     const maxX = Math.max(...(hasTs ? [...xs, ...xf] : xs));
-    let minY = Math.min(...[...ys, ...(yf.length ? yf : [ys[0]])]);
-    let maxY = Math.max(...[...ys, ...(yf.length ? yf : [ys[0]])]);
+    const minY = Math.min(...[...ys, ...(yf.length ? yf : [ys[0]])]);
+    const maxY = Math.max(...[...ys, ...(yf.length ? yf : [ys[0]])]);
     // Add headroom/padding for readability
     let rangeY = maxY - minY;
     if (!Number.isFinite(rangeY) || rangeY === 0) rangeY = Math.abs(maxY) * 0.1 || 1;
@@ -110,7 +110,7 @@ export default function Sparkline({ points, forecast = [], size = 'md', showAxis
       yTicks.push({ v, y: ny(v) });
     }
 
-    return { d: path, areaD: areaPath, dForecast: pathF, ticks, yTicks, minYp, maxYp };
+    return { d: path, areaD: areaPath, dForecast: pathF, ticks, yTicks };
   }, [points, forecast, chartH, showAxis]);
 
   if (!d) {

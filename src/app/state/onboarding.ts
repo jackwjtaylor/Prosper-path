@@ -25,12 +25,25 @@ export type OnboardingDraft = {
   netIncomeSelf?: number;
   netIncomePartner?: number;
   essentialExp?: number;
+  totalExpenses?: number;
+  grossIncomeSelf?: number;
+  grossIncomePartner?: number;
   housing?: 'rent'|'own'|'other';
   rent?: number;
   mortgagePmt?: number;
   cash?: number;
+  emergencySavings?: number;
+  termDeposits?: number;
+  investmentsTotal?: number;
+  pensionTotal?: number;
+  homeValue?: number;
+  mortgageBalance?: number;
+  housingRunningCosts?: number;
   debtPmts?: number;
   debtTotal?: number;
+  shortTermLiabilities?: number;
+  assetsTotal?: number;
+  liabilitiesTotal?: number;
   rawSlots?: Record<string, { value: any; confidence?: string }>;
 };
 
@@ -65,7 +78,7 @@ let obState: OnboardingStore = {
   setStage: (s) => setState({ stage: s }),
   updatePersona: (p) => setState({ persona: { ...obState.persona, ...(p || {}) } }),
   updateDraft: (d) => setState({ draft: { ...obState.draft, ...(d || {}) } }),
-  reset: () => setState({ stage: 'intro', persona: {} }),
+  reset: () => setState({ stage: 'intro', persona: {}, draft: {} }),
 };
 
 function setState(partial: Partial<OnboardingState>) {

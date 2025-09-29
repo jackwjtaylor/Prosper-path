@@ -2,6 +2,7 @@
 
 import React, { Suspense } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 
 function LeadsAdminInner() {
@@ -35,7 +36,7 @@ function LeadsAdminInner() {
         <header className="sticky top-0 z-40 backdrop-blur bg-white/70 border-b">
           <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
             <Link href="/home" className="flex items-center gap-2 text-sm font-semibold">
-              <img src="/2D76K394.eps.svg" alt="Prosper Logo" className="h-6 w-6" />
+              <Image src="/favicon.png" alt="Prosper" width={24} height={24} className="h-6 w-6 rounded-sm" />
               Prosper — Leads Admin
             </Link>
           </div>
@@ -53,7 +54,7 @@ function LeadsAdminInner() {
       <header className="sticky top-0 z-40 backdrop-blur bg-white/70 border-b">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link href="/home" className="flex items-center gap-2 text-sm font-semibold">
-            <img src="/2D76K394.eps.svg" alt="Prosper Logo" className="h-6 w-6" />
+            <Image src="/favicon.png" alt="Prosper" width={24} height={24} className="h-6 w-6 rounded-sm" />
             Prosper — Leads Admin
           </Link>
           <button onClick={load} className="text-sm px-3 py-1 rounded border bg-white hover:bg-gray-50">Refresh</button>

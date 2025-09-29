@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import supabase from "@/app/lib/supabaseServer";
-import type { Slots } from "@/app/lib/schema/slots";
 import { updateSnapshotMerge, enforceMeteredPaywall } from "@/app/lib/snapshotService";
 import { withHouseholdAccess, z } from "@/app/api/_lib/withApi";
 import { parseBirthYear, parseBoolean, parseIntegerFromText, parsePercentFraction } from "@/app/lib/finance/normalize";
@@ -102,17 +101,6 @@ export const POST = withHouseholdAccess<z.infer<typeof BodySchema>>(
       const check = await enforceMeteredPaywall(householdId as string, { origin, email: (hh as any)?.email, isAuthed: !!user });
       if (!check.ok) return NextResponse.json({ error: 'free_limit_exceeded', upgrade_url: (check as any).upgrade_url, login_url: (check as any).login_url }, { status: 402 });
     } catch {}
-
-    // Load latest inputs
-    const { data: snaps } = await supabase
-      .from('snapshots')
-      .select('id, created_at, inputs')
-      .eq('household_id', householdId as string)
-      .order('created_at', { ascending: false })
-      .limit(1);
-    const latest = snaps?.[0] || null;
-    const existingInputs = (latest?.inputs as any) || {};
-    const existingSlots = (existingInputs?.slots as Slots | undefined) || ({} as any);
 
     // Merge incoming
     const body = (data ?? {}) as Partial<z.infer<typeof BodySchema>>;

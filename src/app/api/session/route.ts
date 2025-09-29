@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 
     // Try preferred model first, then fallback to the stable preview if needed
     const preferred = process.env.REALTIME_MODEL || "gpt-realtime";
-    let attempt = await createSession(preferred);
+    const attempt = await createSession(preferred);
     if (!attempt.ok || !attempt.json?.client_secret?.value) {
       const fallbackModel = "gpt-4o-realtime-preview-2025-06-03";
       const fallback = await createSession(fallbackModel);

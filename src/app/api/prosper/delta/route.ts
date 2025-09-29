@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import supabase from "@/app/lib/supabaseServer";
-import type { Slots } from "@/app/lib/schema/slots";
 import { updateSnapshotDeltas, enforceMeteredPaywall } from "@/app/lib/snapshotService";
 import { withHouseholdAccess, z } from "@/app/api/_lib/withApi";
 

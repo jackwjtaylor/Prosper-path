@@ -9,10 +9,9 @@ type ActionCardProps = {
   completed?: boolean;
   onOpenChat?: () => void;
   onDone?: () => void;
-  onDismiss?: () => void;
 };
 
-export default function ActionCard({ title, why, steps, recommended, completed, onOpenChat, onDone, onDismiss }: ActionCardProps) {
+export default function ActionCard({ title, why, steps, recommended, completed, onOpenChat, onDone }: ActionCardProps) {
   return (
     <div className={`border border-border rounded-md p-2 bg-white`}>
       <div className="flex items-start justify-between gap-2">

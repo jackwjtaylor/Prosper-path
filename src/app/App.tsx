@@ -5,10 +5,6 @@ import { v4 as uuidv4 } from "uuid";
 import Image from "next/image";
 import Link from "next/link";
 
-import Transcript from "./components/Transcript";
-import Dashboard from "./components/Dashboard";
-import LeftPaneControls from "./components/LeftPaneControls";
-import ChatPanel from "./components/ChatPanel";
 import VoiceDock from "./components/VoiceDock";
 import ThemeToggle from "./components/ThemeToggle";
 import VoiceOnboardingOverlay, { VoiceOnboardingPhase } from "./components/VoiceOnboardingOverlay";
@@ -31,7 +27,6 @@ import { ensureHouseholdId } from "@/app/lib/householdLocal";
 import { getSupabaseClient } from "@/app/lib/supabaseClient";
 import { useAppStore } from "@/app/state/store";
 import { useOnboardingStore } from "@/app/state/onboarding";
-import { hapticToggle } from "@/app/lib/haptics";
 
 const sdkScenarioMap: Record<string, RealtimeAgent[]> = allAgentSets;
 
@@ -49,8 +44,6 @@ function App() {
   const sessionStatus = useAppStore(s => s.sessionStatus);
   const setSessionStatus = useAppStore(s => s.setSessionStatus);
   const isPTTActive = useAppStore(s => s.isPTTActive);
-  const setIsPTTActive = useAppStore(s => s.setIsPTTActive);
-  const isPTTUserSpeaking = useAppStore(s => s.isPTTUserSpeaking);
   const setIsPTTUserSpeaking = useAppStore(s => s.setIsPTTUserSpeaking);
   const isAudioPlaybackEnabled = useAppStore(s => s.isAudioPlaybackEnabled);
   const setIsAudioPlaybackEnabled = useAppStore(s => s.setIsAudioPlaybackEnabled);
@@ -72,8 +65,7 @@ function App() {
   const [returningCheckReady, setReturningCheckReady] = useState<boolean>(false);
   const voiceOnboardingFlag = (process.env.NEXT_PUBLIC_VOICE_ONBOARDING || "").toLowerCase();
   const voiceOnboardingV2Flag = (process.env.NEXT_PUBLIC_VOICE_ONBOARDING_V2 || "").toLowerCase();
-  const simpleOnlyFlag = (process.env.NEXT_PUBLIC_SIMPLE_ONLY || "true").toLowerCase();
-  const isSimpleOnly = simpleOnlyFlag === '1' || simpleOnlyFlag === 'true' || simpleOnlyFlag === 'yes';
+  const isSimpleOnly = true; // legacy dashboard fully retired
   const isVoiceOnboardingEnabled =
     voiceOnboardingFlag === "1" || voiceOnboardingFlag === "true" || voiceOnboardingFlag === "yes" ||
     voiceOnboardingV2Flag === "1" || voiceOnboardingV2Flag === "true" || voiceOnboardingV2Flag === "yes";
@@ -177,13 +169,26 @@ function App() {
         if (slots.net_income_monthly_self?.value != null) draft.netIncomeSelf = toNum(slots.net_income_monthly_self.value);
         if (slots.net_income_monthly_partner?.value != null) draft.netIncomePartner = toNum(slots.net_income_monthly_partner.value);
         if (slots.essential_expenses_monthly?.value != null) draft.essentialExp = toNum(slots.essential_expenses_monthly.value);
+        if (slots.total_expenses_monthly?.value != null) draft.totalExpenses = toNum(slots.total_expenses_monthly.value);
+        if (slots.gross_income_annual_self?.value != null) draft.grossIncomeSelf = toNum(slots.gross_income_annual_self.value);
+        if (slots.gross_income_annual_partner?.value != null) draft.grossIncomePartner = toNum(slots.gross_income_annual_partner.value);
         const hs = slots.housing_status?.value || inputs.housing_status;
         if (hs === 'rent' || hs === 'own' || hs === 'other') draft.housing = hs;
         if (slots.rent_monthly?.value != null) draft.rent = toNum(slots.rent_monthly.value);
         if (slots.mortgage_payment_monthly?.value != null) draft.mortgagePmt = toNum(slots.mortgage_payment_monthly.value);
         if (slots.cash_liquid_total?.value != null) draft.cash = toNum(slots.cash_liquid_total.value);
+        if ((slots as any).emergency_savings_liquid?.value != null) draft.emergencySavings = toNum((slots as any).emergency_savings_liquid.value);
+        if (slots.term_deposits_le_3m?.value != null) draft.termDeposits = toNum(slots.term_deposits_le_3m.value);
+        if (slots.investments_ex_home_total?.value != null) draft.investmentsTotal = toNum(slots.investments_ex_home_total.value);
+        if (slots.pension_balance_total?.value != null) draft.pensionTotal = toNum(slots.pension_balance_total.value);
+        if (slots.home_value?.value != null) draft.homeValue = toNum(slots.home_value.value);
+        if (slots.mortgage_balance?.value != null) draft.mortgageBalance = toNum(slots.mortgage_balance.value);
+        if (slots.housing_running_costs_monthly?.value != null) draft.housingRunningCosts = toNum(slots.housing_running_costs_monthly.value);
         if (slots.other_debt_payments_monthly_total?.value != null) draft.debtPmts = toNum(slots.other_debt_payments_monthly_total.value);
         if (slots.other_debt_balances_total?.value != null) draft.debtTotal = toNum(slots.other_debt_balances_total.value);
+        if (slots.short_term_liabilities_12m?.value != null) draft.shortTermLiabilities = toNum(slots.short_term_liabilities_12m.value);
+        if ((slots as any).assets_total?.value != null) draft.assetsTotal = toNum((slots as any).assets_total.value);
+        if ((slots as any).debts_total?.value != null) draft.liabilitiesTotal = toNum((slots as any).debts_total.value);
         draft.rawSlots = slots as any;
         // Update overlay greeting name from profile events if available
         if (!voiceIntroName && persona.name && typeof persona.name === 'string') {
@@ -334,7 +339,7 @@ function App() {
     }
   }, [sdkAudioElement]);
 
-  const { connect, disconnect, sendUserText, sendEvent, interrupt, mute } = useRealtimeSession({
+  const { connect, disconnect, sendUserText, sendEvent, mute } = useRealtimeSession({
     onConnectionChange: (s) => setSessionStatus(s as SessionStatus),
     onAgentHandoff: (agentName: string) => {
       setHandoffTriggered(true);
@@ -414,7 +419,6 @@ function App() {
       }
     },
   });
-  const [userText, setUserText] = useState<string>("");
 
   const { startRecording, stopRecording } = useAudioDownload();
 
@@ -730,31 +734,7 @@ function App() {
     return;
   };
 
-  const handleSendTextMessage = () => {
-    if (!userText.trim()) return;
-    interrupt();
-    try {
-      sendUserText(userText.trim());
-    } catch (err) {
-      console.error('Failed to send via SDK', err);
-    }
-    setUserText("");
-  };
-
   // PTT controls
-  const handleTalkButtonDown = () => {
-    if (sessionStatus !== 'CONNECTED') return;
-    interrupt();
-    setIsPTTUserSpeaking(true);
-    sendClientEvent({ type: 'input_audio_buffer.clear' }, 'clear PTT buffer');
-  };
-  const handleTalkButtonUp = () => {
-    if (sessionStatus !== 'CONNECTED' || !isPTTUserSpeaking) return;
-    setIsPTTUserSpeaking(false);
-    sendClientEvent({ type: 'input_audio_buffer.commit' }, 'commit PTT');
-    sendClientEvent({ type: 'response.create' }, 'trigger response PTT');
-  };
-
   const onToggleConnection = () => {
     if (sessionStatus === "CONNECTED" || sessionStatus === "CONNECTING") {
       disconnectFromRealtime();
@@ -794,65 +774,19 @@ function App() {
     return () => { stopRecording(); };
   }, [sessionStatus]);
 
-  const [activeTab, setActiveTab] = useState('chat' as 'chat' | 'dashboard');
-  const isTranscriptVisible = useAppStore(s => s.isTranscriptVisible);
-  const [shouldRenderChat, setShouldRenderChat] = useState(true);
-  const [showChatColumn, setShowChatColumn] = useState(true);
-
-  // Animate transcript hide: slide left then collapse column
   useEffect(() => {
-    if (isTranscriptVisible) {
-      setShowChatColumn(true);
-      setShouldRenderChat(true);
-    } else {
-      // keep rendered for animation, then collapse
-      const t = setTimeout(() => {
-        setShowChatColumn(false);
-        setShouldRenderChat(false);
-      }, 320);
-      return () => clearTimeout(t);
-    }
-  }, [isTranscriptVisible]);
-
-  // Allow dashboard to request opening chat with prefilled text
-  useEffect(() => {
-    const handler = (e: any) => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { text?: string } | undefined;
+      const text = typeof detail?.text === 'string' ? detail.text.trim() : '';
+      if (!text) return;
       try {
-        const text = e?.detail?.text as string | undefined;
-        if (typeof text === 'string' && text.trim()) {
-          setActiveTab('chat');
-          setUserText(text);
-        } else {
-          setActiveTab('chat');
-        }
-      } catch {
-        setActiveTab('chat');
-      }
-    };
-    window.addEventListener('pp:open_chat', handler as any);
-    return () => window.removeEventListener('pp:open_chat', handler as any);
-  }, []);
-
-  // Allow other components to programmatically send a message (auto-send)
-  // Use the SDK helper so the agent responds in voice as well as text.
-  useEffect(() => {
-    const handler = (e: CustomEvent) => {
-      try {
-        const text = e?.detail?.text as string | undefined;
-        if (typeof text === 'string' && text.trim()) {
-          setActiveTab('chat');
-          interrupt();
-          try {
-            sendUserText(text.trim());
-            // Explicitly request a response so TTS/audio is produced.
-            sendEvent({ type: 'response.create' });
-          } catch {}
-        }
+        sendUserText(text);
+        sendEvent({ type: 'response.create' });
       } catch {}
     };
     window.addEventListener('pp:send_chat', handler as any);
     return () => window.removeEventListener('pp:send_chat', handler as any);
-  }, [sendUserText, sendEvent, interrupt]);
+  }, [sendUserText, sendEvent]);
 
   return (
     <div className="text-base flex flex-col h-screen bg-app text-foreground">
@@ -980,91 +914,16 @@ function App() {
         </div>
       </div>
 
-      {/* BODY: hide legacy dashboard when Simple-only mode or overlay is active */}
+      {/* BODY: legacy dashboard retired in favour of Simple workspace */}
       <div className="flex-1 w-full min-h-0">
         <div className="max-w-7xl mx-auto px-2 h-full min-h-0 pb-16 lg:pb-0">
-          {(!isSimpleOnly && !showVoiceIntro) ? (
-            <>
-              <div className={`hidden lg:grid grid-cols-1 ${showChatColumn ? 'lg:grid-cols-[520px_1fr]' : 'lg:grid-cols-1'} gap-4 h-full min-h-0`}>
-                {/* Left column: Integrated Chat Panel (animates out) */}
-                {showChatColumn && (
-                  <div className={`transition-all duration-300 ease-out ${isTranscriptVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-full pointer-events-none'}`}>
-                    {shouldRenderChat && (
-                      <ChatPanel
-                        userText={userText}
-                        setUserText={setUserText}
-                        onSendMessage={handleSendTextMessage}
-                        onToggleConnection={onToggleConnection}
-                      />
-                    )}
-                  </div>
-                )}
-                {/* Right column: Dashboard expands to full width when transcript hidden */}
-                <Dashboard />
-              </div>
-
-              {/* Mobile: single view with tabs */}
-              <div className="block lg:hidden h-full min-h-0">
-                {activeTab === 'chat' ? (
-                  <ChatPanel
-                    userText={userText}
-                    setUserText={setUserText}
-                    onSendMessage={handleSendTextMessage}
-                    onToggleConnection={onToggleConnection}
-                  />
-                ) : (
-                  <Dashboard />
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="h-full min-h-[40vh]" aria-hidden />
-          )}
+          <div className="h-full min-h-[40vh]" aria-hidden />
         </div>
 
-        {/* Bottom mobile voice-first nav */}
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border shadow-sm z-40">
-          <div className="max-w-7xl mx-auto px-3">
-            <div className="flex items-center justify-between py-2 gap-2">
-              <button
-                className={`flex-1 px-3 py-2 rounded-md text-sm ${activeTab === 'chat' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-800'}`}
-                onClick={() => setActiveTab('chat')}
-                aria-label="Chat"
-              >
-                Chat
-              </button>
-              <button
-                className={`shrink-0 h-12 w-12 rounded-full border shadow-sm ${
-                  isMicMuted ? 'bg-red-600 border-red-600 text-white' : 'bg-emerald-600 border-emerald-600 text-white'
-                }`}
-                onClick={() => { setIsMicMuted(!isMicMuted); hapticToggle(!isMicMuted); }}
-                disabled={sessionStatus !== 'CONNECTED'}
-                aria-pressed={!isMicMuted}
-                aria-label={isMicMuted ? 'Unmute microphone' : 'Mute microphone'}
-                title={sessionStatus !== 'CONNECTED' ? 'Connect to control mic' : (isMicMuted ? 'Unmute mic' : 'Mute mic')}
-              >
-                <span className="relative inline-flex items-center justify-center h-full w-full">
-                  {!isMicMuted && (
-                    <span className="animate-ping absolute inline-flex h-12 w-12 rounded-full bg-emerald-400 opacity-40"></span>
-                  )}
-                  <span className="relative">{isMicMuted ? 'Unmute' : 'Mute'}</span>
-                </span>
-              </button>
-              <button
-                className={`flex-1 px-3 py-2 rounded-md text-sm ${activeTab === 'dashboard' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-800'}`}
-                onClick={() => setActiveTab('dashboard')}
-                aria-label="Dashboard"
-              >
-                Dashboard
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
       <VoiceOnboardingOverlay
         visible={showVoiceIntro}
         phase={voiceIntroPhase}
-        status={sessionStatus}
         error={voiceIntroError}
         onSkip={handleSkipVoiceIntro}
         segments={voiceIntroSegments}

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { withApi, z } from '@/app/api/_lib/withApi';
+import { withApi } from '@/app/api/_lib/withApi';
 import supabase from '@/app/lib/supabaseServer';
 
-export const GET = withApi<{}>(
+export const GET = withApi<undefined>(
   { parse: 'none', sameOrigin: true, rateLimit: { bucket: 'leads_list', limit: 30, windowMs: 60_000 } },
   async () => {
     try {
@@ -18,4 +18,3 @@ export const GET = withApi<{}>(
     }
   }
 );
-

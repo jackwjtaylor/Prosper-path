@@ -40,11 +40,9 @@ export const POST = withApi<z.infer<typeof BodySchema>>(
       };
       const { error } = await supabase.from('prosper_leads').insert(row);
       if (error) {
-        // eslint-disable-next-line no-console
         console.log('[lead_capture:fallback]', { error: error.message, payload });
       }
     } catch (e: any) {
-      // eslint-disable-next-line no-console
       console.log('[lead_capture:error]', { error: e?.message, payload });
     }
     return NextResponse.json({ ok: true });

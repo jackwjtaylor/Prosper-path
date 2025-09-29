@@ -132,28 +132,6 @@ export function BenchmarksCard({ latest, kpis, className = '', expanded, onToggl
     return { text: `Top ${top}% of peers`, detail: label, top };
   })();
 
-  const share = async () => {
-    const qs = new URLSearchParams({
-      country: String(cohortParams.country || 'UK'),
-      age: String(cohortParams.age || ''),
-      home: String(cohortParams.home || ''),
-      income: String(cohortParams.income || ''),
-      dependants: String(cohortParams.dependants || ''),
-      top: String(topLine.top || ''),
-    });
-    const url = `${location.origin}/share/benchmarks?${qs.toString()}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: 'People like you — Prosper', text: `${topLine.text} (${topLine.detail})`, url });
-      } else {
-        await navigator.clipboard.writeText(url);
-        alert('Share link copied to clipboard');
-      }
-    } catch {}
-  };
-
-  
-
   return (
     <div className={`p-3 panel-24 relative ${className}`}>
       <button

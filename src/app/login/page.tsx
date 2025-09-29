@@ -1,5 +1,6 @@
 "use client";
 import React from 'react';
+import Image from 'next/image';
 import { getSupabaseClient } from '@/app/lib/supabaseClient';
 
 export default function LoginPage() {
@@ -71,7 +72,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
         <div className="flex items-center justify-center mb-2">
-          <img src="/2D76K394.eps.svg" alt="Prosper Logo" className="h-10 w-10" />
+          <Image src="/favicon.png" alt="Prosper" width={40} height={40} className="h-10 w-10 rounded-sm" />
         </div>
         <h1 className="text-xl font-semibold mb-4 text-center">Sign in to Prosper</h1>
         <div className="space-y-3">

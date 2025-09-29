@@ -38,7 +38,7 @@ export default function WaitlistForm({ buttonLabel = "Join Waitlist", placeholde
         return;
       }
       setStatus("success");
-    } catch (err) {
+    } catch {
       setError("Network error. Please try again.");
       setStatus("error");
     }

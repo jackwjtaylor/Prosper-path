@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import supabase from "@/app/lib/supabaseServer";
-import { z, parseQuery } from "@/app/api/_lib/validation";
 
 export async function GET(req: NextRequest) {
   const dev = process.env.NEXT_PUBLIC_DEV_ROUTES === '1';
