@@ -44,7 +44,7 @@ Getting Started
 
 
 Project Structure (selected)
-- `src/app/App.tsx` — Shell (header, layout, voice/session wiring, transcript + dashboard)
+- `src/app/components/SimpleWorkspace.tsx` — Shell (header, layout, voice/session wiring, transcript + dashboard)
 - `src/app/components/Dashboard.tsx` — Modular dashboard grid, hero voice controls, action plan, KPI grid
 - `src/app/components/TopVoiceControls.tsx` — Hero voice banner (connect/mic/visualizer + sample prompts)
 - `src/app/components/VoiceDock.tsx` — Floating voice dock
@@ -140,7 +140,7 @@ The application will be accessible at `http://localhost:3000`.
 
 
 ## Output Guardrails
-Assistant messages are checked for safety and compliance before they are shown in the UI.  The guardrail call now lives directly inside `src/app/App.tsx`: when a `response.text.delta` stream starts we mark the message as **IN_PROGRESS**, and once the server emits `guardrail_tripped` or `response.done` we mark the message as **FAIL** or **PASS** respectively.  If you want to change how moderation is triggered or displayed, search for `guardrail_tripped` inside `App.tsx` and tweak the logic there.
+Assistant messages are checked for safety and compliance before they are shown in the UI. The guardrail call now lives directly inside `src/app/components/SimpleWorkspace.tsx`: when a `response.text.delta` stream starts we mark the message as **IN_PROGRESS**, and once the server emits `guardrail_tripped` or `response.done` we mark the message as **FAIL** or **PASS** respectively. If you want to change how moderation is triggered or displayed, search for `guardrail_tripped` inside `SimpleWorkspace.tsx` and tweak the logic there.
 
 ## Waitlist Landing Page (Marketing‑only mode)
 

@@ -35,7 +35,7 @@
 ## Security & Configuration
 - Secrets: Never commit `.env`. Use `.env.sample` as reference. Required keys include `OPENAI_API_KEY`, Supabase, and Stripe variables (see README).
 - Realtime keys: `/api/session` issues ephemeral OpenAI keys; keep server-side keys private and respect same-origin checks.
-- Guardrails: Output moderation is handled in `src/app/App.tsx` (search `guardrail_tripped`).
+- Guardrails: Output moderation is handled in `src/app/components/SimpleWorkspace.tsx` (search `guardrail_tripped`).
 
 ---
 
@@ -108,7 +108,7 @@ This section documents the new voice‑first onboarding, agent structure, runtim
 
 ## UI Components & Pages (key)
 - Overlay: `src/app/components/VoiceOnboardingOverlay.tsx`
-- App shell: `src/app/App.tsx` (session wiring, transcript, handoff logic, guardrails)
+- App shell: `src/app/components/SimpleWorkspace.tsx` (session wiring, transcript, handoff logic, guardrails)
 - Simple workspace: `src/app/components/SimpleWorkspace.tsx`
   - Inline explain dialog: lightweight realtime session, transcript, checklist, confetti on complete.
 
@@ -139,4 +139,3 @@ This section documents the new voice‑first onboarding, agent structure, runtim
 5. Tile click → inline explain dialog + checklist; mark done → voice reflection + confetti.
 6. Build plan → snapshot saved → gating unlocks (provisional rules) → tiles update.
 7. Analytics visible in Feedback Admin.
-
